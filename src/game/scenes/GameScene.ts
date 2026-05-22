@@ -1,14 +1,17 @@
 import Phaser from 'phaser';
-import { COLORS, CPU, ERASER, ROUND_LIMIT, SHOT, TABLE, UI } from '../constants';
+import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, ROUND_LIMIT, SHOT, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI } from '../constants';
 import { Eraser } from '../objects/Eraser';
-import type { AimState, EndReason, PlayState, TableBounds, Winner } from '../types';
+import type { AimState, CpuShotConfig, EndReason, GameSceneData, PlayState, StageOpponent, TableBounds, Winner } from '../types';
 import { playSound } from '../utils/audio';
 import { createResultData } from '../utils/result';
 import { clampMagnitude, edgeDistance, isBodyStopped, isPointOutsideTable, powerFromSwipe, stopBody } from '../utils/physics';
 
 export class GameScene extends Phaser.Scene {
   private state: PlayState = 'ready';
+  private stage = 1;
   private round = 1;
+  private opponent: StageOpponent = STAGE_OPPONENTS[0];
+  private cpuShotConfig: CpuShotConfig = CPU_BY_DIFFICULTY.easy;
   private table!: TableBounds;
   private player!: Eraser;
   private cpu!: Eraser;
@@ -33,6 +36,12 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super('GameScene');
+  }
+
+  init(data?: GameSceneData): void {
+    this.stage = Phaser.Math.Clamp(Number.isFinite(data?.stage) ? Number(data?.stage) : 1, 1, STAGE_LIMIT);
+    this.opponent = STAGE_OPPONENTS.find((opponent) => opponent.stage === this.stage) ?? STAGE_OPPONENTS[0];
+    this.cpuShotConfig = CPU_BY_DIFFICULTY[this.opponent.difficulty];
   }
 
   create(): void {
@@ -103,7 +112,7 @@ export class GameScene extends Phaser.Scene {
     this.roundText = this.add
       .text(UI.safeX + 12, UI.safeTop + 54, '', {
         fontFamily: UI.fontFamily,
-        fontSize: '16px',
+        fontSize: '14px',
         fontStyle: '900',
         color: '#ffe28a',
       })
@@ -113,7 +122,7 @@ export class GameScene extends Phaser.Scene {
     this.statusText = this.add
       .text(width - UI.safeX - 12, UI.safeTop + 54, '', {
         fontFamily: UI.fontFamily,
-        fontSize: '16px',
+        fontSize: '14px',
         fontStyle: '900',
         color: '#f9f3df',
       })
@@ -187,8 +196,8 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.cpu = new Eraser(this, cpuStart.x, cpuStart.y, {
-      key: 'eraser-cpu',
-      label: 'BATTLE',
+      key: `eraser-cpu-${this.opponent.eraserLabel}`,
+      label: this.opponent.eraserLabel,
       tag: 'CPU',
       mainColor: COLORS.cpu,
       darkColor: COLORS.cpuDark,
@@ -304,10 +313,11 @@ export class GameScene extends Phaser.Scene {
     const from = new Phaser.Math.Vector2(this.cpu.x, this.cpu.y);
     const to = new Phaser.Math.Vector2(this.player.x, this.player.y);
     const direction = to.subtract(from).normalize();
-    const angleOffset = Phaser.Math.DegToRad(Phaser.Math.Between(-CPU.aimRandomAngleDeg, CPU.aimRandomAngleDeg));
+    const angleOffset = Phaser.Math.DegToRad(Phaser.Math.Between(-this.cpuShotConfig.aimRandomAngleDeg, this.cpuShotConfig.aimRandomAngleDeg));
     direction.rotate(angleOffset);
-    const riskyBoost = Phaser.Math.Between(0, 100) < 14 ? 120 : 0;
-    const power = CPU.basePower + Phaser.Math.Between(-CPU.powerRandom, CPU.powerRandom) + riskyBoost;
+    const riskyShotRate = CPU_BY_DIFFICULTY[this.opponent.difficulty].riskyShotRate;
+    const riskyBoost = Phaser.Math.Between(0, 100) < riskyShotRate ? 120 : 0;
+    const power = this.cpuShotConfig.basePower + Phaser.Math.Between(-this.cpuShotConfig.powerRandom, this.cpuShotConfig.powerRandom) + riskyBoost;
     const body = this.cpu.body as Phaser.Physics.Arcade.Body;
 
     body.setVelocity(direction.x * power, direction.y * power);
@@ -388,6 +398,14 @@ export class GameScene extends Phaser.Scene {
     this.helpText.setText(callout);
     this.helpText.setScale(1.08);
     this.tweens.add({ targets: this.helpText, scale: 1, duration: 180, ease: 'Back.easeOut' });
+    if (playerOut && cpuOut) {
+      this.spawnBattleOutcomeEffect('自爆！', 0xff9c45);
+    } else if (cpuOut) {
+      this.spawnBattleOutcomeEffect('K.O.!', 0xffe06b);
+      playSound('win');
+    } else if (playerOut) {
+      this.spawnBattleOutcomeEffect(reason === 'selfOut' ? 'やりすぎショット！' : 'LOSE...', 0x9ab6e8);
+    }
     this.finishGame(winner, reason);
   }
 
@@ -408,12 +426,19 @@ export class GameScene extends Phaser.Scene {
     const result = createResultData({
       winner,
       reason,
+      stage: this.stage,
+      opponentName: this.opponent.name,
       round: this.round,
       playerEdgeDistance: edgeDistance(this.player.x, this.player.y, this.table),
       cpuEdgeDistance: edgeDistance(this.cpu.x, this.cpu.y, this.table),
     });
 
-    this.time.delayedCall(540, () => {
+    this.time.delayedCall(winner === 'player' && reason !== 'draw' ? 880 : 540, () => {
+      if (winner === 'player' && this.stage < STAGE_LIMIT) {
+        this.scene.start('RoundClearScene', result);
+        return;
+      }
+
       this.scene.start('ResultScene', result);
     });
   }
@@ -446,7 +471,7 @@ export class GameScene extends Phaser.Scene {
       aiming: '矢印の方向に飛びます',
       moving: '止まるか落ちるまで待機',
       cpuThinking: 'CPUが狙いを決めています',
-      cpuTurn: 'BATTLEがショット中',
+      cpuTurn: `${this.opponent.label}がショット中`,
       result: '勝敗が決まりました',
     };
     const subHelpByState: Record<PlayState, string> = {
@@ -461,7 +486,7 @@ export class GameScene extends Phaser.Scene {
     };
 
     if (this.roundText) {
-      this.roundText.setText(`ラウンド ${this.round} / ${ROUND_LIMIT}`);
+      this.roundText.setText(`ROUND ${this.stage}/${STAGE_LIMIT}  TURN ${this.round}/${ROUND_LIMIT}`);
     }
     if (this.statusText) {
       this.statusText.setText(statusByState[nextState]);
@@ -589,6 +614,46 @@ export class GameScene extends Phaser.Scene {
       duration: 260,
       ease: 'Sine.easeOut',
       onComplete: () => graphics.destroy(),
+    });
+  }
+
+  private spawnBattleOutcomeEffect(label: string, color: number): void {
+    const isWin = label === 'K.O.!';
+    const isSelf = label.includes('自爆') || label.includes('やりすぎ');
+    this.cameras.main.flash(130, isWin ? 255 : 255, isWin ? 224 : 156, isWin ? 107 : 69, false);
+    this.cameras.main.shake(isWin ? 170 : 130, isWin ? 0.006 : 0.004);
+    const burst = this.add.graphics().setDepth(90);
+    const centerX = this.scale.width / 2;
+    const centerY = this.table.top + this.table.height * 0.42;
+    burst.fillStyle(color, 0.95);
+    burst.fillCircle(centerX, centerY, 44);
+    burst.lineStyle(5, 0x3a2417, 0.84);
+    for (let i = 0; i < 14; i += 1) {
+      const angle = (Math.PI * 2 * i) / 14 + (isSelf ? 0.16 : 0);
+      burst.lineBetween(centerX + Math.cos(angle) * 34, centerY + Math.sin(angle) * 34, centerX + Math.cos(angle) * 86, centerY + Math.sin(angle) * 86);
+    }
+    const text = this.add
+      .text(centerX, centerY, label, {
+        fontFamily: UI.fontFamily,
+        fontSize: `${this.scale.width < 420 ? 28 : 36}px`,
+        fontStyle: '900',
+        color: '#2d2119',
+        stroke: '#fff8dc',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(91)
+      .setScale(0.72);
+    this.tweens.add({
+      targets: [burst, text],
+      scale: 1.08,
+      alpha: 0,
+      duration: 680,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        burst.destroy();
+        text.destroy();
+      },
     });
   }
 

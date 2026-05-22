@@ -1,10 +1,39 @@
 export const OFFICIAL_SITE_URL = 'https://heisei-school-games.vercel.app/';
+export const GAME_URL = 'https://keshigomu-battle.vercel.app/';
 
 export const GAME_TITLE = '机上決戦！\n消しゴム落とし';
 export const GAME_SUBTITLE = '休み時間、机の上の天下を取れ！';
 export const ENGLISH_TITLE = 'Eraser Battle';
 
 export const ROUND_LIMIT = 5;
+export const STAGE_LIMIT = 3;
+
+export const STAGE_OPPONENTS = [
+  {
+    stage: 1,
+    name: 'となりの席の友人',
+    label: 'FRIEND',
+    introText: '「なあ、消しゴム落としやろうぜ！」',
+    difficulty: 'easy',
+    eraserLabel: 'FRIEND',
+  },
+  {
+    stage: 2,
+    name: 'クラスの消しゴム職人',
+    label: 'CRAFT',
+    introText: '「その角度、まだ甘いな。」',
+    difficulty: 'normal',
+    eraserLabel: 'CRAFT',
+  },
+  {
+    stage: 3,
+    name: '机上決戦のラスボス',
+    label: 'BOSS',
+    introText: '「この机の王者は、俺だ。」',
+    difficulty: 'hard',
+    eraserLabel: 'BOSS',
+  },
+] as const;
 
 export const UI = {
   safeX: 20,
@@ -46,6 +75,27 @@ export const CPU = {
   aimRandomAngleDeg: 22,
   thinkDelayMs: 680,
 };
+
+export const CPU_BY_DIFFICULTY = {
+  easy: {
+    basePower: 300,
+    powerRandom: 180,
+    aimRandomAngleDeg: 26,
+    riskyShotRate: 18,
+  },
+  normal: {
+    basePower: 360,
+    powerRandom: 160,
+    aimRandomAngleDeg: 18,
+    riskyShotRate: 14,
+  },
+  hard: {
+    basePower: 430,
+    powerRandom: 130,
+    aimRandomAngleDeg: 12,
+    riskyShotRate: 10,
+  },
+} as const;
 
 export const COLORS = {
   floor: 0x231811,

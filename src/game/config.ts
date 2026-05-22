@@ -2,7 +2,10 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { ResultScene } from './scenes/ResultScene';
+import { RoundClearScene } from './scenes/RoundClearScene';
+import { StoryScene } from './scenes/StoryScene';
 import { TitleScene } from './scenes/TitleScene';
+import { TutorialScene } from './scenes/TutorialScene';
 
 export const createGameConfig = (parent: HTMLElement): Phaser.Types.Core.GameConfig => ({
   type: Phaser.AUTO,
@@ -29,5 +32,5 @@ export const createGameConfig = (parent: HTMLElement): Phaser.Types.Core.GameCon
     antialias: false,
     roundPixels: true,
   },
-  scene: [BootScene, TitleScene, GameScene, ResultScene],
+  scene: [BootScene, TitleScene, StoryScene, TutorialScene, GameScene, RoundClearScene, ResultScene],
 });

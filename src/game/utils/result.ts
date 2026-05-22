@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROUND_LIMIT } from '../constants';
+import { ROUND_LIMIT, STAGE_LIMIT, STAGE_OPPONENTS } from '../constants';
 import type { EndReason, ResultData, ResultType, ShotGrade, Winner } from '../types';
 import { buildShareText } from './share';
 
@@ -163,11 +163,15 @@ export const formatTightness = (dangerScore: number): string => {
 export const createResultData = (params: {
   winner: Winner;
   reason: EndReason;
+  stage?: number;
+  opponentName?: string;
   round: number;
   playerEdgeDistance: number;
   cpuEdgeDistance: number;
 }): ResultData => {
   const round = Phaser.Math.Clamp(Number.isFinite(params.round) ? params.round : 1, 1, ROUND_LIMIT);
+  const stage = Phaser.Math.Clamp(Number.isFinite(params.stage) ? Number(params.stage) : 1, 1, STAGE_LIMIT);
+  const opponentName = params.opponentName?.trim() || STAGE_OPPONENTS.find((opponent) => opponent.stage === stage)?.name || '対戦相手';
   const playerEdgeDistance = Math.max(0, Math.round(Number.isFinite(params.playerEdgeDistance) ? params.playerEdgeDistance : 0));
   const cpuEdgeDistance = Math.max(0, Math.round(Number.isFinite(params.cpuEdgeDistance) ? params.cpuEdgeDistance : 0));
   const resultType = resultTypeFrom(params.winner, params.reason);
@@ -186,6 +190,9 @@ export const createResultData = (params: {
     winner: params.winner,
     reason: params.reason,
     resultType,
+    stage,
+    stageMax: STAGE_LIMIT,
+    opponentName,
     round,
     rounds: round,
     maxRounds: ROUND_LIMIT,
@@ -212,6 +219,8 @@ export const createFallbackResultData = (): ResultData =>
   createResultData({
     winner: 'draw',
     reason: 'draw',
+    stage: 1,
+    opponentName: STAGE_OPPONENTS[0].name,
     round: 1,
     playerEdgeDistance: 50,
     cpuEdgeDistance: 50,

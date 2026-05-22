@@ -80,7 +80,7 @@ export class TitleScene extends Phaser.Scene {
     const buttonWidth = Math.min(width * 0.82, 330);
     const buttonY = Math.min(height - safeBottom - 108, noteY + noteHeight + 86);
     this.createButton(centerX, buttonY, buttonWidth, 'ゲーム開始', () => {
-      this.scene.start('GameScene');
+      this.scene.start('StoryScene');
     });
 
     const linkY = Math.min(height - safeBottom - 22, buttonY + 66);
