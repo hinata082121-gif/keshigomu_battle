@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, ENGLISH_TITLE, GAME_SUBTITLE, GAME_TITLE, OFFICIAL_SITE_URL, TITLE_COPY, UI } from '../constants';
 import { isMuted, playSound, toggleMuted } from '../utils/audio';
+import { MISSIONS, loadPlayerProgress, pickRecommendedMission } from '../utils/progress';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -77,8 +78,13 @@ export class TitleScene extends Phaser.Scene {
         .setOrigin(0, 0.5);
     });
 
+    const progress = loadPlayerProgress();
+    const mission = pickRecommendedMission(progress);
+    const progressY = noteY + noteHeight + 12;
+    this.drawProgressCard(centerX, progressY, noteWidth, progress, mission.title);
+
     const buttonWidth = Math.min(width * 0.82, 330);
-    const buttonY = Math.min(height - safeBottom - 108, noteY + noteHeight + 86);
+    const buttonY = Math.min(height - safeBottom - 108, progressY + 96);
     this.createButton(centerX, buttonY, buttonWidth, 'ゲーム開始', () => {
       this.scene.start('StoryScene');
     });
@@ -184,6 +190,38 @@ export class TitleScene extends Phaser.Scene {
 
     graphics.lineStyle(3, 0xe46a6a, 0.5);
     graphics.lineBetween(x + 30, y + 10, x + 30, y + height - 10);
+  }
+
+  private drawProgressCard(centerX: number, y: number, width: number, progress: ReturnType<typeof loadPlayerProgress>, goal: string): void {
+    const cardHeight = 72;
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0x2d2119, 0.82);
+    graphics.fillRoundedRect(centerX - width / 2, y, width, cardHeight, UI.panelRadius);
+    graphics.lineStyle(2, 0xffe28a, 0.56);
+    graphics.strokeRoundedRect(centerX - width / 2, y, width, cardHeight, UI.panelRadius);
+
+    const missionCount = progress.achievedMissions.length;
+    this.add
+      .text(centerX, y + 15, `ベスト ${progress.bestScore.toLocaleString('ja-JP')}点  称号 ${progress.unlockedBadges.length}種  ミッション ${missionCount}/${MISSIONS.length}`, {
+        fontFamily: UI.fontFamily,
+        fontSize: width < 330 ? '10px' : '12px',
+        fontStyle: '900',
+        color: '#fff8dc',
+        align: 'center',
+        wordWrap: { width: width - 20 },
+      })
+      .setOrigin(0.5, 0);
+
+    this.add
+      .text(centerX, y + 42, `今日の目標：${goal}`, {
+        fontFamily: UI.fontFamily,
+        fontSize: width < 330 ? '11px' : '13px',
+        fontStyle: '900',
+        color: '#ffe28a',
+        align: 'center',
+        wordWrap: { width: width - 24 },
+      })
+      .setOrigin(0.5, 0);
   }
 
   private createButton(x: number, y: number, width: number, label: string, onClick: () => void): void {

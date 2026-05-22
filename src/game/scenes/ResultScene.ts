@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, GAME_TITLE, GAME_URL, HASHTAGS, OFFICIAL_SITE_URL, UI } from '../constants';
 import type { ResultData, ResultImageData, ResultType } from '../types';
 import { playSound } from '../utils/audio';
+import { markResultImageSaved } from '../utils/progress';
 import { createFallbackResultData } from '../utils/result';
 
 type ResultButton = {
@@ -75,30 +76,29 @@ export class ResultScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const centerX = width / 2;
     const isWide = width >= 760;
-    const isCompact = height < 740;
-    const panelWidth = Math.min(width - 32, isWide ? 640 : 366);
+    const isCompact = height < 780 && !isWide;
+    const panelWidth = Math.min(width - 32, isWide ? 900 : 366);
     const accent = accentByType[this.result.resultType] ?? accentByType.draw;
 
     this.drawBackground(width, height, accent);
-    const titleY = UI.safeTop + (isCompact ? 8 : 18);
-    const oneLinerY = UI.safeTop + (isCompact ? 62 : 78);
-    const titleCardY = UI.safeTop + (isCompact ? 96 : 122);
+    let cursorY = UI.safeTop + (isCompact ? 6 : 16);
 
     const title = this.add
-      .text(centerX, titleY, resultLabels[this.result.resultType], {
+      .text(centerX, cursorY, resultLabels[this.result.resultType], {
         fontFamily: UI.fontFamily,
-        fontSize: `${Math.min(50, Math.max(39, width * 0.13))}px`,
+        fontSize: `${isCompact ? 36 : Math.min(50, Math.max(39, width * 0.13))}px`,
         fontStyle: '900',
         color: accent.title,
         stroke: '#2c1a12',
         strokeThickness: 8,
       })
       .setOrigin(0.5, 0);
+    cursorY += title.displayHeight + (isCompact ? 4 : 10);
 
     this.add
-      .text(centerX, oneLinerY, resultOneLiners[this.result.resultType], {
+      .text(centerX, cursorY, resultOneLiners[this.result.resultType], {
         fontFamily: UI.fontFamily,
-        fontSize: '15px',
+        fontSize: isCompact ? '13px' : '15px',
         fontStyle: '900',
         color: '#fff8dc',
         stroke: '#3a2417',
@@ -107,29 +107,33 @@ export class ResultScene extends Phaser.Scene {
         wordWrap: { width: panelWidth - 24 },
       })
       .setOrigin(0.5, 0);
+    cursorY += isCompact ? 30 : 38;
 
-    const titleCard = this.drawTitleCard(centerX, titleCardY, panelWidth, accent);
+    const titleCard = this.drawTitleCard(centerX, cursorY, isWide ? Math.min(620, panelWidth) : panelWidth, accent);
+    cursorY += Number(titleCard.getData('layoutHeight') ?? 102) + (isCompact ? 12 : 18);
     let statsCard: Phaser.GameObjects.Container;
     let shareCard: Phaser.GameObjects.Container;
     if (isWide) {
-      const cardWidth = (panelWidth - 16) / 2;
-      const contentY = UI.safeTop + 252;
-      statsCard = this.drawStatsPanel(centerX - cardWidth / 2 - 8, contentY, cardWidth);
-      shareCard = this.drawShareCard(centerX + cardWidth / 2 + 8, contentY, cardWidth);
+      const cardWidth = (panelWidth - 24) / 2;
+      const contentY = cursorY;
+      statsCard = this.drawStatsPanel(centerX - cardWidth / 2 - 12, contentY, cardWidth);
+      shareCard = this.drawShareCard(centerX + cardWidth / 2 + 12, contentY, cardWidth);
+      cursorY = contentY + Math.max(Number(statsCard.getData('layoutHeight') ?? 0), Number(shareCard.getData('layoutHeight') ?? 0)) + 28;
     } else {
-      const statsY = UI.safeTop + (isCompact ? 210 : 246);
-      statsCard = this.drawStatsPanel(centerX, statsY, panelWidth);
-      const shareY = UI.safeTop + (isCompact ? 324 : statsY + 132);
-      shareCard = this.drawShareCard(centerX, shareY, panelWidth);
+      statsCard = this.drawStatsPanel(centerX, cursorY, panelWidth);
+      cursorY += Number(statsCard.getData('layoutHeight') ?? 154) + (isCompact ? 10 : 14);
+      shareCard = this.drawShareCard(centerX, cursorY, panelWidth);
+      cursorY += Number(shareCard.getData('layoutHeight') ?? 138) + 24;
     }
 
-    const buttonWidth = Math.min(panelWidth, isWide ? 480 : 336);
-    const gridWidth = Math.min(buttonWidth, isWide ? 520 : 336);
+    const gridWidth = Math.min(panelWidth, isWide ? 620 : 336);
     const halfWidth = (gridWidth - 10) / 2;
+    const buttonHeight = Math.max(UI.minButtonHeight, 54);
     const rowGap = isCompact ? 58 : 64;
-    const retryY = height - UI.safeBottom - 74;
-    const imageY = retryY - rowGap;
-    const textY = imageY - rowGap;
+    const buttonStartY = Math.max(cursorY, isWide ? height - UI.safeBottom - 246 : cursorY);
+    const textY = buttonStartY + buttonHeight / 2;
+    const imageY = textY + rowGap;
+    const retryY = imageY + rowGap;
 
     this.copyButton = this.createButton(centerX - halfWidth / 2 - 5, textY, halfWidth, '結果をコピー', 0xf7ead0, () => {
       void this.copyResult();
@@ -159,7 +163,7 @@ export class ResultScene extends Phaser.Scene {
     });
 
     this.feedbackText = this.add
-      .text(centerX, Math.max(UI.safeTop + 418, textY - 32), '', {
+      .text(centerX, Math.max(cursorY - 18, textY - 32), '', {
         fontFamily: UI.fontFamily,
         fontSize: '13px',
         fontStyle: '900',
@@ -169,7 +173,7 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.createOfficialLink(centerX, height - UI.safeBottom - 18, Math.min(width * 0.82, 330));
+    this.createOfficialLink(centerX, Math.min(height - UI.safeBottom - 16, retryY + rowGap - 10), Math.min(width * 0.82, 330));
     this.playIntroTweens(title, titleCard, statsCard, shareCard);
   }
 
@@ -199,7 +203,7 @@ export class ResultScene extends Phaser.Scene {
 
   private drawTitleCard(centerX: number, y: number, width: number, accent: { badge: number }): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
-    const height = 102;
+    const height = this.scale.height < 780 && this.scale.width < 760 ? 92 : 102;
     const shadow = this.add.rectangle(4, 6, width, height, 0x4b2819, 0.9).setOrigin(0.5, 0);
     const paper = this.add.rectangle(0, 0, width, height, COLORS.paper, 1).setOrigin(0.5, 0);
     paper.setStrokeStyle(3, 0x3a2417, 0.9);
@@ -235,7 +239,8 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     container.add([shadow, paper, badge, badgeText, opponent, title]);
-    if (this.result.dangerScore >= 78) {
+    container.setData('layoutHeight', height);
+    if (this.result.dangerScore >= 78 && height >= 102) {
       const danger = this.add
         .text(0, 94, '落ちそうで落ちない机上残留', {
           fontFamily: UI.fontFamily,
@@ -252,25 +257,28 @@ export class ResultScene extends Phaser.Scene {
 
   private drawStatsPanel(centerX: number, y: number, width: number): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
-    const height = 118;
+    const compact = this.scale.height < 780 && this.scale.width < 760;
+    const height = compact ? 146 : 176;
     const shadow = this.add.rectangle(4, 5, width, height, COLORS.paperShadow, 1).setOrigin(0.5, 0);
     const paper = this.add.rectangle(0, 0, width, height, COLORS.paper, 1).setOrigin(0.5, 0);
     paper.setStrokeStyle(2, 0xd8b8a0, 0.9);
 
     const rows = [
-      ['対戦', `${this.result.stage} / ${this.result.stageMax}`],
-      ['ターン', `${this.result.rounds} / ${this.result.maxRounds}`],
+      ['総合スコア', `${this.result.scoreResult.score.toLocaleString('ja-JP')}点`],
+      ['ランク', `${this.result.scoreResult.rank}${this.result.scoreResult.isBestScore ? ' / ベスト更新!' : ''}`],
+      ['対戦', `${this.result.stage} / ${this.result.stageMax}  ${this.result.opponentName}`],
+      ['ポイント', `${this.result.playerPoints} - ${this.result.cpuPoints}`],
       ['ギリギリ度', `${this.result.dangerScore}%`],
       ['評価', this.result.shotGradeLabel],
     ];
 
     container.add([shadow, paper]);
     rows.forEach(([label, value], index) => {
-      const rowY = 20 + index * 28;
+      const rowY = (compact ? 14 : 18) + index * (compact ? 23 : 26);
       const labelText = this.add
         .text(-width / 2 + 24, rowY, label, {
           fontFamily: UI.fontFamily,
-          fontSize: width < 300 ? '12px' : '14px',
+          fontSize: compact || width < 300 ? '11px' : '13px',
           fontStyle: '900',
           color: '#5a3824',
         })
@@ -278,21 +286,24 @@ export class ResultScene extends Phaser.Scene {
       const valueText = this.add
         .text(width / 2 - 24, rowY, value, {
           fontFamily: UI.fontFamily,
-          fontSize: width < 300 ? '13px' : '16px',
+          fontSize: compact || width < 300 ? '12px' : '15px',
           fontStyle: '900',
           color: '#2d2119',
+          align: 'right',
+          wordWrap: { width: width * 0.58 },
         })
         .setOrigin(1, 0.5);
       container.add([labelText, valueText]);
     });
 
+    container.setData('layoutHeight', height);
     return container;
   }
 
   private drawShareCard(centerX: number, y: number, width: number): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
-    const compact = this.scale.height < 740;
-    const height = compact ? 104 : 154;
+    const compact = this.scale.height < 780 && this.scale.width < 760;
+    const height = compact ? 132 : 184;
     const background = this.add.rectangle(0, 0, width, height, 0x2d2119, 0.9).setOrigin(0.5, 0);
     background.setStrokeStyle(2, 0xffe28a, 0.7);
     const heading = this.add
@@ -313,10 +324,22 @@ export class ResultScene extends Phaser.Scene {
         wordWrap: { width: width - 34 },
       })
       .setOrigin(0.5, 0);
-    const sharePreview = this.add
-      .text(0, compact ? 74 : 96, this.buildSharePreview(), {
+    const achieved = this.result.missions.filter((item) => item.achieved).slice(0, compact ? 1 : 2);
+    const missionLine = achieved.length > 0 ? `達成: ${achieved.map((item) => item.mission.title).join(' / ')}` : `称号: ${this.result.unlockedBadgeCount}種  ミッション: ${this.result.achievedMissionCount}/${this.result.missionTotal}`;
+    const missions = this.add
+      .text(0, compact ? 72 : 96, missionLine, {
         fontFamily: UI.fontFamily,
-        fontSize: compact ? '9px' : '11px',
+        fontSize: compact ? '10px' : '12px',
+        fontStyle: '900',
+        color: '#ffe28a',
+        align: 'center',
+        wordWrap: { width: width - 34 },
+      })
+      .setOrigin(0.5, 0);
+    const sharePreview = this.add
+      .text(0, compact ? 98 : 128, this.buildSharePreview(), {
+        fontFamily: UI.fontFamily,
+        fontSize: compact ? '8px' : '10px',
         fontStyle: '800',
         color: '#e9d8ba',
         align: 'center',
@@ -325,7 +348,8 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    container.add([background, heading, summary, sharePreview]);
+    container.add([background, heading, summary, missions, sharePreview]);
+    container.setData('layoutHeight', height);
     return container;
   }
 
@@ -432,6 +456,7 @@ export class ResultScene extends Phaser.Scene {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      markResultImageSaved();
       playSound('copy');
       this.showFeedback('結果画像を保存しました');
     } catch {
@@ -467,6 +492,7 @@ export class ResultScene extends Phaser.Scene {
         return;
       }
       await navigator.share(shareData);
+      markResultImageSaved();
       this.showFeedback('画像共有を開きました');
     } catch {
       this.showFeedback('画像共有に失敗しました。通常のスクリーンショットをご利用ください。');
@@ -482,6 +508,10 @@ export class ResultScene extends Phaser.Scene {
       reachedStage: this.result.stage,
       dangerScore: this.result.dangerScore,
       shotGradeLabel: this.result.shotGradeLabel,
+      score: this.result.scoreResult.score,
+      rank: this.result.scoreResult.rank,
+      isBestScore: this.result.scoreResult.isBestScore,
+      missions: this.result.missions.filter((item) => item.achieved).slice(0, 3).map((item) => item.mission.title),
       summary: this.result.summary,
       shareText: this.result.shareText,
     };
@@ -545,6 +575,8 @@ export class ResultScene extends Phaser.Scene {
     this.drawCanvasWrappedText(context, data.badge, 540, 486, 760, 60);
 
     const stats = [
+      ['総合スコア', `${data.score.toLocaleString('ja-JP')}点`],
+      ['評価ランク', `${data.rank}${data.isBestScore ? ' / ベスト更新!' : ''}`],
       ['到達ラウンド', `${data.reachedStage} / 3`],
       ['対戦相手', data.opponentName],
       ['ギリギリ度', `${data.dangerScore}%`],
@@ -552,15 +584,15 @@ export class ResultScene extends Phaser.Scene {
     ];
     context.textAlign = 'left';
     stats.forEach(([label, value], index) => {
-      const y = 642 + index * 86;
+      const y = 598 + index * 58;
       context.fillStyle = '#f6ead0';
-      this.roundRect(context, 126, y - 48, 828, 62, 10);
+      this.roundRect(context, 126, y - 38, 828, 48, 10);
       context.fill();
       context.fillStyle = '#5a3824';
-      context.font = '900 28px sans-serif';
+      context.font = '900 23px sans-serif';
       context.fillText(label, 162, y - 10);
       context.fillStyle = '#2d2119';
-      context.font = '900 34px sans-serif';
+      context.font = '900 27px sans-serif';
       context.fillText(value, 430, y - 10);
     });
 
@@ -576,13 +608,18 @@ export class ResultScene extends Phaser.Scene {
     context.fillStyle = '#e9d8ba';
     context.font = '800 26px sans-serif';
     this.drawCanvasWrappedText(context, data.shareText.split('\n').filter(Boolean)[0] ?? data.summary, 162, 1098, 760, 34, 'left');
+    if (data.missions.length > 0) {
+      context.fillStyle = '#ffe28a';
+      context.font = '900 24px sans-serif';
+      this.drawCanvasWrappedText(context, `達成ミッション：${data.missions.join(' / ')}`, 162, 1160, 760, 30, 'left');
+    }
 
     context.fillStyle = '#fff8dc';
     context.font = '900 30px sans-serif';
     context.textAlign = 'center';
-    context.fillText(HASHTAGS.join(' '), 540, 1198);
+    context.fillText(HASHTAGS.join(' '), 540, 1212);
     context.font = '800 28px sans-serif';
-    context.fillText(GAME_URL, 540, 1246);
+    context.fillText(GAME_URL, 540, 1254);
 
     return canvas;
   }

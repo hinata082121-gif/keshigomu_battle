@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { ROUND_LIMIT, STAGE_LIMIT, STAGE_OPPONENTS } from '../constants';
-import type { EndReason, ResultData, ResultType, ShotGrade, Winner } from '../types';
+import { POINTS_TO_WIN, ROUND_LIMIT, STAGE_LIMIT, STAGE_OPPONENTS } from '../constants';
+import type { EndReason, ResultData, ResultType, RunStats, ScoreResult, ShotGrade, Winner } from '../types';
+import { MISSIONS, createInitialRunStats, normalizeRunStats } from './progress';
 import { buildShareText } from './share';
 
 const titlePools: Record<ResultType, string[]> = {
@@ -168,6 +169,9 @@ export const createResultData = (params: {
   round: number;
   playerEdgeDistance: number;
   cpuEdgeDistance: number;
+  playerPoints?: number;
+  cpuPoints?: number;
+  runStats?: Partial<RunStats>;
 }): ResultData => {
   const round = Phaser.Math.Clamp(Number.isFinite(params.round) ? params.round : 1, 1, ROUND_LIMIT);
   const stage = Phaser.Math.Clamp(Number.isFinite(params.stage) ? Number(params.stage) : 1, 1, STAGE_LIMIT);
@@ -186,6 +190,12 @@ export const createResultData = (params: {
   const seed = round * 23 + playerEdgeDistance * 3 - cpuEdgeDistance * 2 + resultType.length * 11;
   const isCloseWin = (resultType === 'win' || resultType === 'judgeWin') && dangerScore >= 76;
   const titlePool = isCloseWin ? closeWinTitles : titlePools[resultType];
+  const runStats = normalizeRunStats(params.runStats ?? createInitialRunStats(), stage);
+  const scoreResult: ScoreResult = {
+    score: 0,
+    rank: 'D',
+    isBestScore: false,
+  };
   const result: ResultData = {
     winner: params.winner,
     reason: params.reason,
@@ -208,6 +218,17 @@ export const createResultData = (params: {
     shareText: '',
     playerEdgeDistance,
     cpuEdgeDistance,
+    playerPoints: Math.max(0, Math.round(Number.isFinite(params.playerPoints) ? Number(params.playerPoints) : 0)),
+    cpuPoints: Math.max(0, Math.round(Number.isFinite(params.cpuPoints) ? Number(params.cpuPoints) : 0)),
+    pointsToWin: POINTS_TO_WIN,
+    runStats,
+    scoreResult,
+    missions: [],
+    bestScore: 0,
+    unlockedBadgeCount: 0,
+    achievedMissionCount: 0,
+    missionTotal: MISSIONS.length,
+    isNewBadge: false,
   };
 
   result.shotRating = result.shotGradeLabel;

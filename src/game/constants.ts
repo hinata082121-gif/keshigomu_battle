@@ -7,6 +7,7 @@ export const ENGLISH_TITLE = 'Eraser Battle';
 
 export const ROUND_LIMIT = 5;
 export const STAGE_LIMIT = 3;
+export const POINTS_TO_WIN = 2;
 
 export const STAGE_OPPONENTS = [
   {
@@ -56,17 +57,17 @@ export const TABLE = {
 export const ERASER = {
   width: 76,
   height: 42,
-  bounce: 0.74,
-  drag: 285,
+  bounce: 0.7,
+  drag: 330,
   maxVelocity: 680,
   bodyInset: 2,
 };
 
 export const SHOT = {
   minPower: 145,
-  maxPower: 640,
+  maxPower: 620,
   maxSwipeDistance: 132,
-  stopSpeedThreshold: 14,
+  stopSpeedThreshold: 16,
 };
 
 export const CPU = {
@@ -79,22 +80,28 @@ export const CPU = {
 export const CPU_BY_DIFFICULTY = {
   easy: {
     basePower: 300,
-    powerRandom: 180,
+    powerRandom: 170,
     aimRandomAngleDeg: 26,
     riskyShotRate: 18,
   },
   normal: {
     basePower: 360,
-    powerRandom: 160,
+    powerRandom: 140,
     aimRandomAngleDeg: 18,
     riskyShotRate: 14,
   },
   hard: {
-    basePower: 430,
-    powerRandom: 130,
-    aimRandomAngleDeg: 12,
+    basePower: 410,
+    powerRandom: 110,
+    aimRandomAngleDeg: 13,
     riskyShotRate: 10,
   },
+} as const;
+
+export const STAGE_BALANCE = {
+  1: { maxPower: 560, drag: 350, bounce: 0.68, stopSpeedThreshold: 17, playerXRatio: 0.5, playerYRatio: 0.66, cpuXRatio: 0.5, cpuYRatio: 0.34 },
+  2: { maxPower: 600, drag: 330, bounce: 0.7, stopSpeedThreshold: 16, playerXRatio: 0.43, playerYRatio: 0.65, cpuXRatio: 0.57, cpuYRatio: 0.35 },
+  3: { maxPower: 620, drag: 315, bounce: 0.72, stopSpeedThreshold: 15, playerXRatio: 0.5, playerYRatio: 0.63, cpuXRatio: 0.5, cpuYRatio: 0.37 },
 } as const;
 
 export const COLORS = {

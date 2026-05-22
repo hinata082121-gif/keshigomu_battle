@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, ROUND_LIMIT, SHOT, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI } from '../constants';
+import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, POINTS_TO_WIN, ROUND_LIMIT, SHOT, STAGE_BALANCE, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI } from '../constants';
 import { Eraser } from '../objects/Eraser';
-import type { AimState, CpuShotConfig, EndReason, GameSceneData, PlayState, StageOpponent, TableBounds, Winner } from '../types';
+import type { AimState, CpuShotConfig, EndReason, GameSceneData, MatchPointState, PlayState, RunStats, StageOpponent, TableBounds, Winner } from '../types';
 import { playSound } from '../utils/audio';
 import { createResultData } from '../utils/result';
 import { clampMagnitude, edgeDistance, isBodyStopped, isPointOutsideTable, powerFromSwipe, stopBody } from '../utils/physics';
+import { createInitialRunStats, finalizeResultProgress, normalizeRunStats } from '../utils/progress';
 
 export class GameScene extends Phaser.Scene {
   private state: PlayState = 'ready';
@@ -31,8 +32,15 @@ export class GameScene extends Phaser.Scene {
   private bottomGraphics!: Phaser.GameObjects.Graphics;
   private powerText!: Phaser.GameObjects.Text;
   private graffiti: Phaser.GameObjects.Text[] = [];
+  private obstacles: Phaser.GameObjects.Rectangle[] = [];
+  private obstacleLabels: Phaser.GameObjects.Text[] = [];
+  private pointState: MatchPointState = { playerPoints: 0, cpuPoints: 0, pointsToWin: POINTS_TO_WIN };
+  private runStats: RunStats = createInitialRunStats();
+  private lastShotBy: Winner = 'draw';
   private turnLock = false;
   private lastCollisionAt = 0;
+  private lastObstacleHitAt = 0;
+  private resolvingPoint = false;
 
   constructor() {
     super('GameScene');
@@ -42,18 +50,25 @@ export class GameScene extends Phaser.Scene {
     this.stage = Phaser.Math.Clamp(Number.isFinite(data?.stage) ? Number(data?.stage) : 1, 1, STAGE_LIMIT);
     this.opponent = STAGE_OPPONENTS.find((opponent) => opponent.stage === this.stage) ?? STAGE_OPPONENTS[0];
     this.cpuShotConfig = CPU_BY_DIFFICULTY[this.opponent.difficulty];
+    this.runStats = normalizeRunStats(data?.runStats, this.stage);
+    this.runStats.reachedStage = Math.max(this.runStats.reachedStage, this.stage);
   }
 
   create(): void {
     this.state = 'ready';
     this.round = 1;
+    this.pointState = { playerPoints: 0, cpuPoints: 0, pointsToWin: POINTS_TO_WIN };
+    this.lastShotBy = 'draw';
+    this.resolvingPoint = false;
     this.turnLock = false;
     this.table = this.calculateTable();
     this.createLayers();
     this.createUi();
     this.createErasers();
+    this.createObstacles();
     this.registerInput();
     this.physics.add.collider(this.player, this.cpu, () => this.handleEraserCollision());
+    this.registerObstacleColliders();
     this.scale.on('resize', this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.handleResize, this);
@@ -182,8 +197,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createErasers(): void {
-    const playerStart = { x: this.table.left + this.table.width * 0.5, y: this.table.bottom - 72 };
-    const cpuStart = { x: this.table.left + this.table.width * 0.5, y: this.table.top + 72 };
+    const { playerStart, cpuStart } = this.getStartPositions();
 
     this.player = new Eraser(this, playerStart.x, playerStart.y, {
       key: 'eraser-player',
@@ -203,6 +217,81 @@ export class GameScene extends Phaser.Scene {
       darkColor: COLORS.cpuDark,
       stripeColor: COLORS.red,
       tagColor: COLORS.cpuDark,
+    });
+
+    this.applyStagePhysics(this.player);
+    this.applyStagePhysics(this.cpu);
+  }
+
+  private getStageBalance(): (typeof STAGE_BALANCE)[keyof typeof STAGE_BALANCE] {
+    return STAGE_BALANCE[this.stage as keyof typeof STAGE_BALANCE] ?? STAGE_BALANCE[1];
+  }
+
+  private getStartPositions(): { playerStart: Phaser.Math.Vector2; cpuStart: Phaser.Math.Vector2 } {
+    const balance = this.getStageBalance();
+    const minEdge = Math.min(92, Math.max(80, this.table.height * 0.18));
+    const clampX = (ratio: number) => Phaser.Math.Clamp(this.table.left + this.table.width * ratio, this.table.left + minEdge, this.table.right - minEdge);
+    const clampY = (ratio: number) => Phaser.Math.Clamp(this.table.top + this.table.height * ratio, this.table.top + minEdge, this.table.bottom - minEdge);
+
+    return {
+      playerStart: new Phaser.Math.Vector2(clampX(balance.playerXRatio), clampY(balance.playerYRatio)),
+      cpuStart: new Phaser.Math.Vector2(clampX(balance.cpuXRatio), clampY(balance.cpuYRatio)),
+    };
+  }
+
+  private applyStagePhysics(eraser: Eraser): void {
+    const body = eraser.body as Phaser.Physics.Arcade.Body;
+    const balance = this.getStageBalance();
+    body.setBounce(balance.bounce);
+    body.setDrag(balance.drag);
+    body.setMaxVelocity(ERASER.maxVelocity);
+  }
+
+  private createObstacles(): void {
+    this.obstacles.forEach((obstacle) => obstacle.destroy());
+    this.obstacleLabels.forEach((label) => label.destroy());
+    this.obstacles = [];
+    this.obstacleLabels = [];
+
+    if (this.stage === 1) {
+      return;
+    }
+
+    if (this.stage === 2) {
+      this.createStaticObstacle('鉛筆', this.table.left + this.table.width * 0.58, this.table.top + this.table.height * 0.5, Math.min(150, this.table.width * 0.42), 18, 0xf1c64f, 0x7a4a1f);
+      return;
+    }
+
+    this.createStaticObstacle('定規', this.table.left + this.table.width * 0.5, this.table.top + this.table.height * 0.48, Math.min(184, this.table.width * 0.5), 22, 0x86d8d0, 0x286d67);
+    this.createStaticObstacle('筆箱', this.table.left + this.table.width * 0.28, this.table.top + this.table.height * 0.5, 54, 96, 0xd98c5f, 0x79452c);
+  }
+
+  private createStaticObstacle(label: string, x: number, y: number, width: number, height: number, color: number, stroke: number): void {
+    const obstacle = this.add.rectangle(x, y, width, height, color, 0.92).setDepth(16);
+    obstacle.setStrokeStyle(3, stroke, 0.95);
+    this.physics.add.existing(obstacle, true);
+    const body = obstacle.body as Phaser.Physics.Arcade.StaticBody;
+    body.setSize(width, height);
+    body.updateFromGameObject();
+    this.obstacles.push(obstacle);
+
+    const labelObject = this.add
+      .text(x, y, label, {
+        fontFamily: UI.fontFamily,
+        fontSize: height > 40 ? '10px' : '11px',
+        fontStyle: '900',
+        color: '#2b1a11',
+      })
+      .setOrigin(0.5)
+      .setDepth(17)
+      .setAlpha(0.74);
+    this.obstacleLabels.push(labelObject);
+  }
+
+  private registerObstacleColliders(): void {
+    this.obstacles.forEach((obstacle) => {
+      this.physics.add.collider(this.player, obstacle, () => this.handleObstacleCollision('player'));
+      this.physics.add.collider(this.cpu, obstacle, () => this.handleObstacleCollision('cpu'));
     });
   }
 
@@ -258,15 +347,22 @@ export class GameScene extends Phaser.Scene {
     const swipe = this.aim.current.clone().subtract(this.aim.start);
     const clamped = clampMagnitude(swipe, SHOT.maxSwipeDistance);
     const distance = clamped.length();
+    const powerLimit = this.getStageBalance().maxPower;
+    const powerRatio = Phaser.Math.Clamp(distance / SHOT.maxSwipeDistance, 0, 1);
     const direction = distance < 6 ? new Phaser.Math.Vector2(0, -1) : clamped.clone().normalize();
-    const power = powerFromSwipe(distance);
+    if (powerRatio > 0.82) {
+      direction.rotate(Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-4.5, 4.5)));
+    }
+    const power = powerFromSwipe(distance, powerLimit);
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
     body.setVelocity(direction.x * power, direction.y * power);
+    this.runStats.totalShots += 1;
+    this.lastShotBy = 'player';
     playSound('shot');
     this.spawnShotEffect(this.player.x, this.player.y, direction, power);
     this.tweenShotSquash(this.player);
-    if (power > SHOT.maxPower * 0.82) {
+    if (power > powerLimit * 0.82) {
       this.cameras.main.shake(90, 0.004);
     }
     this.aim = undefined;
@@ -306,7 +402,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (isPointOutsideTable(this.cpu.x, this.cpu.y, this.table)) {
-      this.finishGame('player', 'knockout');
+      this.resolvePoint('player', 'knockout');
       return;
     }
 
@@ -321,6 +417,8 @@ export class GameScene extends Phaser.Scene {
     const body = this.cpu.body as Phaser.Physics.Arcade.Body;
 
     body.setVelocity(direction.x * power, direction.y * power);
+    this.runStats.totalShots += 1;
+    this.lastShotBy = 'cpu';
     playSound('shot');
     this.spawnShotEffect(this.cpu.x, this.cpu.y, direction, power);
     this.tweenShotSquash(this.cpu);
@@ -342,7 +440,25 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(80, 0.003);
   }
 
+  private handleObstacleCollision(who: Winner): void {
+    const now = this.time.now;
+    if (now - this.lastObstacleHitAt < 180 || this.state === 'result') {
+      return;
+    }
+
+    this.lastObstacleHitAt = now;
+    if (who === 'player' && this.lastShotBy === 'player') {
+      this.runStats.obstacleHits += 1;
+    }
+    playSound('hit');
+    this.spawnImpactEffect(who === 'player' ? this.player.x : this.cpu.x, who === 'player' ? this.player.y : this.cpu.y);
+  }
+
   private checkFallOrStop(): void {
+    if (this.resolvingPoint) {
+      return;
+    }
+
     const playerOut = isPointOutsideTable(this.player.x, this.player.y, this.table);
     const cpuOut = isPointOutsideTable(this.cpu.x, this.cpu.y, this.table);
 
@@ -363,7 +479,8 @@ export class GameScene extends Phaser.Scene {
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     const cpuBody = this.cpu.body as Phaser.Physics.Arcade.Body;
 
-    if (isBodyStopped(playerBody) && isBodyStopped(cpuBody)) {
+    const stopThreshold = this.getStageBalance().stopSpeedThreshold;
+    if (isBodyStopped(playerBody, stopThreshold) && isBodyStopped(cpuBody, stopThreshold)) {
       stopBody(playerBody);
       stopBody(cpuBody);
       this.afterStop();
@@ -388,7 +505,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveFall(playerOut: boolean, cpuOut: boolean): void {
-    if (this.state === 'result') {
+    if (this.state === 'result' || this.resolvingPoint) {
       return;
     }
 
@@ -406,16 +523,77 @@ export class GameScene extends Phaser.Scene {
     } else if (playerOut) {
       this.spawnBattleOutcomeEffect(reason === 'selfOut' ? 'やりすぎショット！' : 'LOSE...', 0x9ab6e8);
     }
-    this.finishGame(winner, reason);
+    this.resolvePoint(winner, reason);
   }
 
   private resolveJudge(): void {
+    if (this.resolvingPoint) {
+      return;
+    }
+
     const playerDistance = edgeDistance(this.player.x, this.player.y, this.table);
     const cpuDistance = edgeDistance(this.cpu.x, this.cpu.y, this.table);
     const diff = playerDistance - cpuDistance;
     const winner: Winner = Math.abs(diff) < 8 ? 'draw' : diff > 0 ? 'player' : 'cpu';
     const reason: EndReason = winner === 'draw' ? 'draw' : 'judge';
-    this.finishGame(winner, reason);
+    this.resolvePoint(winner, reason);
+  }
+
+  private resolvePoint(winner: Winner, reason: EndReason): void {
+    this.resolvingPoint = true;
+    this.turnLock = true;
+    const playerDanger = Phaser.Math.Clamp(Math.round(100 - edgeDistance(this.player.x, this.player.y, this.table) * 2.05), 0, 100);
+    this.runStats.maxDangerScore = Math.max(this.runStats.maxDangerScore, playerDanger);
+
+    if (winner === 'player') {
+      this.pointState.playerPoints += 1;
+      this.runStats.playerPointsWon += 1;
+    } else if (winner === 'cpu') {
+      this.pointState.cpuPoints += 1;
+      this.runStats.cpuPointsWon += 1;
+      if (reason === 'selfOut' || reason === 'doubleOut') {
+        this.runStats.selfDestructs += 1;
+      }
+    }
+
+    this.updateTurnText('moving');
+
+    if (winner !== 'draw' && (this.pointState.playerPoints >= this.pointState.pointsToWin || this.pointState.cpuPoints >= this.pointState.pointsToWin)) {
+      if (winner === 'player') {
+        this.runStats.clearedStages = Math.max(this.runStats.clearedStages, this.stage);
+      }
+      this.time.delayedCall(winner === 'player' ? 880 : 560, () => this.finishGame(winner, reason));
+      return;
+    }
+
+    const pointMessage =
+      winner === 'player'
+        ? Phaser.Utils.Array.GetRandom(['1本！', '先取！', '場外ポイント！'])
+        : winner === 'cpu'
+          ? Phaser.Utils.Array.GetRandom(['取られた！', '1本返された！', 'まだ勝負は終わっていない！'])
+          : '判定つかず！仕切り直し';
+    this.showPointMessage(pointMessage);
+    this.time.delayedCall(980, () => this.resetForNextPoint());
+  }
+
+  private showPointMessage(message: string): void {
+    this.helpText.setText(`${message}  ${this.pointState.playerPoints}-${this.pointState.cpuPoints}`);
+    this.helpText.setScale(1.1);
+    this.tweens.add({ targets: this.helpText, scale: 1, duration: 180, ease: 'Back.easeOut' });
+    this.spawnBattleOutcomeEffect(message, message.includes('取られ') ? 0x9ab6e8 : 0xffe06b);
+  }
+
+  private resetForNextPoint(): void {
+    const { playerStart, cpuStart } = this.getStartPositions();
+    this.player.revive();
+    this.cpu.revive();
+    this.player.resetTo(playerStart.x, playerStart.y);
+    this.cpu.resetTo(cpuStart.x, cpuStart.y);
+    this.applyStagePhysics(this.player);
+    this.applyStagePhysics(this.cpu);
+    this.round = 1;
+    this.resolvingPoint = false;
+    this.startPlayerTurn();
   }
 
   private finishGame(winner: Winner, reason: EndReason): void {
@@ -431,6 +609,9 @@ export class GameScene extends Phaser.Scene {
       round: this.round,
       playerEdgeDistance: edgeDistance(this.player.x, this.player.y, this.table),
       cpuEdgeDistance: edgeDistance(this.cpu.x, this.cpu.y, this.table),
+      playerPoints: this.pointState.playerPoints,
+      cpuPoints: this.pointState.cpuPoints,
+      runStats: this.runStats,
     });
 
     this.time.delayedCall(winner === 'player' && reason !== 'draw' ? 880 : 540, () => {
@@ -439,7 +620,7 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      this.scene.start('ResultScene', result);
+      this.scene.start('ResultScene', finalizeResultProgress(result));
     });
   }
 
@@ -481,12 +662,12 @@ export class GameScene extends Phaser.Scene {
       aiming: '矢印が長いほど強いショット',
       moving: 'ショット中は操作できません',
       cpuThinking: '0.7秒後にCPUが弾きます',
-      cpuTurn: '次のラウンドまで待ってね',
+      cpuTurn: '2ポイント先取でステージ突破',
       result: '',
     };
 
     if (this.roundText) {
-      this.roundText.setText(`ROUND ${this.stage}/${STAGE_LIMIT}  TURN ${this.round}/${ROUND_LIMIT}`);
+      this.roundText.setText(`STAGE ${this.stage}/${STAGE_LIMIT}  POINT ${this.pointState.playerPoints}-${this.pointState.cpuPoints}`);
     }
     if (this.statusText) {
       this.statusText.setText(statusByState[nextState]);
@@ -562,7 +743,7 @@ export class GameScene extends Phaser.Scene {
 
   private spawnShotEffect(x: number, y: number, direction: Phaser.Math.Vector2, power: number): void {
     const graphics = this.add.graphics().setDepth(54);
-    const powerRatio = Phaser.Math.Clamp(power / SHOT.maxPower, 0, 1);
+    const powerRatio = Phaser.Math.Clamp(power / this.getStageBalance().maxPower, 0, 1);
     graphics.lineStyle(2, 0xfff0a5, 0.75);
     for (let i = -1; i <= 1; i += 1) {
       const offset = new Phaser.Math.Vector2(direction.y, -direction.x).scale(i * 8);
@@ -786,6 +967,8 @@ export class GameScene extends Phaser.Scene {
     if (this.player && this.cpu) {
       scalePoint(this.player);
       scalePoint(this.cpu);
+      this.createObstacles();
+      this.registerObstacleColliders();
     }
 
     this.titleText.setPosition(this.scale.width / 2, UI.safeTop + 10);

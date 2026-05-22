@@ -12,15 +12,18 @@ const shareLeadByType: Record<ResultData['resultType'], string[]> = {
 };
 
 export const buildShareText = (
-  result: Pick<ResultData, 'resultType' | 'round' | 'title' | 'dangerScore' | 'summary'>,
+  result: Pick<ResultData, 'resultType' | 'round' | 'title' | 'dangerScore' | 'summary'> & Partial<Pick<ResultData, 'scoreResult' | 'stage'>>,
 ): string => {
   const candidates = shareLeadByType[result.resultType] ?? SHARE_LINES;
   const line = candidates[(result.round + result.title.length) % candidates.length] ?? result.summary;
   const gameName = GAME_TITLE.replace('\n', '');
+  const scoreLine = result.scoreResult && result.scoreResult.score > 0 ? `スコア：${result.scoreResult.score.toLocaleString('ja-JP')}点 / ランク${result.scoreResult.rank}\n` : '';
+  const stageLine = result.stage ? `到達ラウンド：${result.stage} / 3\n` : '';
 
   return `${line}
 称号：${result.title}
 ギリギリ度：${result.dangerScore}%
+${stageLine}${scoreLine}
 
 『${gameName}』
 ${HASHTAGS.join(' ')}

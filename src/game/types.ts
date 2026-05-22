@@ -40,6 +40,7 @@ export interface StageOpponent {
 
 export interface GameSceneData {
   stage?: number;
+  runStats?: RunStats;
 }
 
 export interface GameProgress {
@@ -56,8 +57,57 @@ export interface ResultImageData {
   reachedStage: number;
   dangerScore: number;
   shotGradeLabel: string;
+  score: number;
+  rank: ScoreRank;
+  isBestScore: boolean;
+  missions: string[];
   summary: string;
   shareText: string;
+}
+
+export interface MatchPointState {
+  playerPoints: number;
+  cpuPoints: number;
+  pointsToWin: number;
+}
+
+export interface RunStats {
+  totalShots: number;
+  selfDestructs: number;
+  playerPointsWon: number;
+  cpuPointsWon: number;
+  reachedStage: number;
+  clearedStages: number;
+  obstacleHits: number;
+  maxDangerScore: number;
+  savedResultImage: boolean;
+}
+
+export type ScoreRank = 'S' | 'A' | 'B' | 'C' | 'D';
+
+export interface ScoreResult {
+  score: number;
+  rank: ScoreRank;
+  isBestScore: boolean;
+}
+
+export interface Mission {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface MissionResult {
+  mission: Mission;
+  achieved: boolean;
+  newlyAchieved: boolean;
+}
+
+export interface PlayerProgress {
+  bestScore: number;
+  unlockedBadges: string[];
+  achievedMissions: string[];
+  playCount: number;
 }
 
 export interface TableBounds {
@@ -78,6 +128,7 @@ export interface CpuShotConfig {
   basePower: number;
   powerRandom: number;
   aimRandomAngleDeg: number;
+  riskyShotRate: number;
 }
 
 export interface ResultData {
@@ -102,4 +153,15 @@ export interface ResultData {
   shareText: string;
   playerEdgeDistance: number;
   cpuEdgeDistance: number;
+  playerPoints: number;
+  cpuPoints: number;
+  pointsToWin: number;
+  runStats: RunStats;
+  scoreResult: ScoreResult;
+  missions: MissionResult[];
+  bestScore: number;
+  unlockedBadgeCount: number;
+  achievedMissionCount: number;
+  missionTotal: number;
+  isNewBadge: boolean;
 }

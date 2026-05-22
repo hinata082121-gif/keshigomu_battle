@@ -12,12 +12,12 @@ export const clampMagnitude = (vector: Phaser.Math.Vector2, maxLength: number): 
   return vector.clone();
 };
 
-export const powerFromSwipe = (distance: number): number => {
+export const powerFromSwipe = (distance: number, maxPower = SHOT.maxPower): number => {
   const normalized = Phaser.Math.Clamp(distance / SHOT.maxSwipeDistance, 0, 1);
-  return Phaser.Math.Linear(SHOT.minPower, SHOT.maxPower, normalized);
+  return Phaser.Math.Linear(SHOT.minPower, maxPower, normalized);
 };
 
-export const isBodyStopped = (body: Phaser.Physics.Arcade.Body): boolean => body.speed <= SHOT.stopSpeedThreshold;
+export const isBodyStopped = (body: Phaser.Physics.Arcade.Body, threshold = SHOT.stopSpeedThreshold): boolean => body.speed <= threshold;
 
 export const stopBody = (body: Phaser.Physics.Arcade.Body): void => {
   body.setVelocity(0, 0);
