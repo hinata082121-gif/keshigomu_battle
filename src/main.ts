@@ -12,9 +12,8 @@ const game = new Phaser.Game(createGameConfig(root));
 
 const resizeToViewport = () => {
   const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-  const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
   document.documentElement.style.setProperty('--app-height', `${viewportHeight}px`);
-  game.scale.resize(viewportWidth, viewportHeight);
+  game.scale.refresh();
 };
 
 const preventViewportGesture = (event: TouchEvent) => {

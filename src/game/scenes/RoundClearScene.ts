@@ -3,6 +3,7 @@ import { COLORS, STAGE_LIMIT, STAGE_OPPONENTS, UI } from '../constants';
 import type { ResultData } from '../types';
 import { playSound } from '../utils/audio';
 import { createFallbackResultData } from '../utils/result';
+import { isSmallPhoneViewport } from '../utils/viewport';
 
 export class RoundClearScene extends Phaser.Scene {
   private result: ResultData = createFallbackResultData();
@@ -34,6 +35,7 @@ export class RoundClearScene extends Phaser.Scene {
     this.children.removeAll();
     const { width, height } = this.scale;
     const centerX = width / 2;
+    const isCompact = isSmallPhoneViewport() || height <= 760;
     const nextStage = Math.min(this.result.stage + 1, STAGE_LIMIT);
     const nextOpponent = STAGE_OPPONENTS.find((opponent) => opponent.stage === nextStage);
 
@@ -41,7 +43,7 @@ export class RoundClearScene extends Phaser.Scene {
     this.add
       .text(centerX, UI.safeTop + 22, `ラウンド${this.result.stage}クリア！`, {
         fontFamily: UI.fontFamily,
-        fontSize: `${Math.min(44, Math.max(31, width * 0.1))}px`,
+        fontSize: `${isCompact ? 29 : Math.min(44, Math.max(31, width * 0.1))}px`,
         fontStyle: '900',
         color: '#ffe06b',
         stroke: '#2c1a12',
@@ -51,14 +53,14 @@ export class RoundClearScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     const panelWidth = Math.min(width - 34, width > 700 ? 560 : 362);
-    const panelHeight = Math.min(390, height - UI.safeTop - UI.safeBottom - 168);
-    const panelY = UI.safeTop + 108;
+    const panelHeight = isCompact ? 344 : Math.min(390, height - UI.safeTop - UI.safeBottom - 168);
+    const panelY = UI.safeTop + (isCompact ? 78 : 108);
     this.drawPanel(centerX, panelY, panelWidth, panelHeight);
 
     this.add
-      .text(centerX, panelY + 30, `${this.result.opponentName}に勝利！`, {
+      .text(centerX, panelY + (isCompact ? 22 : 30), `${this.result.opponentName}に勝利！`, {
         fontFamily: UI.fontFamily,
-        fontSize: `${width < 380 ? 19 : 23}px`,
+        fontSize: `${isCompact ? 20 : width < 380 ? 19 : 23}px`,
         fontStyle: '900',
         color: '#2d2119',
         align: 'center',
@@ -67,9 +69,9 @@ export class RoundClearScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     this.add
-      .text(centerX, panelY + 84, this.getOpponentComment(), {
+      .text(centerX, panelY + (isCompact ? 70 : 84), this.getOpponentComment(), {
         fontFamily: UI.fontFamily,
-        fontSize: `${width < 380 ? 15 : 17}px`,
+        fontSize: `${isCompact ? 15 : width < 380 ? 15 : 17}px`,
         fontStyle: '900',
         color: '#7a321d',
         align: 'center',
@@ -78,12 +80,12 @@ export class RoundClearScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    this.drawVersusStrip(centerX, panelY + 168, panelWidth - 42);
+    this.drawVersusStrip(centerX, panelY + (isCompact ? 134 : 168), panelWidth - 42);
 
     this.add
-      .text(centerX, panelY + 238, nextOpponent ? `${nextOpponent.name}が立ちはだかる` : 'ついに最終結果へ', {
+      .text(centerX, panelY + (isCompact ? 202 : 238), nextOpponent ? (isCompact ? this.shortNextOpponent(nextOpponent.stage) : `${nextOpponent.name}が立ちはだかる`) : 'ついに最終結果へ', {
         fontFamily: UI.fontFamily,
-        fontSize: `${width < 380 ? 15 : 17}px`,
+        fontSize: `${isCompact ? 15 : width < 380 ? 15 : 17}px`,
         fontStyle: '900',
         color: '#2d2119',
         align: 'center',
@@ -93,9 +95,9 @@ export class RoundClearScene extends Phaser.Scene {
 
     if (nextOpponent) {
       this.add
-        .text(centerX, panelY + 284, nextOpponent.introText, {
+        .text(centerX, panelY + (isCompact ? 238 : 284), nextOpponent.introText, {
           fontFamily: UI.fontFamily,
-          fontSize: `${width < 380 ? 15 : 17}px`,
+          fontSize: `${isCompact ? 14 : width < 380 ? 15 : 17}px`,
           fontStyle: '900',
           color: '#7a321d',
           align: 'center',
@@ -104,13 +106,23 @@ export class RoundClearScene extends Phaser.Scene {
         .setOrigin(0.5, 0);
     }
 
-    this.createButton(centerX, height - UI.safeBottom - 78, Math.min(width * 0.82, 330), `次のラウンドへ`, () => {
+    this.createButton(centerX, isCompact ? panelY + panelHeight - 42 : height - UI.safeBottom - 78, Math.min(width * 0.82, 330), `次のラウンドへ`, () => {
       if (this.locked) {
         return;
       }
       this.locked = true;
       this.scene.start('GameScene', { stage: nextStage, runStats: this.result.runStats });
     });
+  }
+
+  private shortNextOpponent(stage: number): string {
+    if (stage === 2) {
+      return '次は消しゴム職人！';
+    }
+    if (stage === 3) {
+      return '次は机上決戦のラスボス！';
+    }
+    return '次の勝負へ！';
   }
 
   private getOpponentComment(): string {

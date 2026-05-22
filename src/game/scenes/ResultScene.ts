@@ -4,6 +4,7 @@ import type { ResultData, ResultImageData, ResultType } from '../types';
 import { playSound } from '../utils/audio';
 import { markResultImageSaved } from '../utils/progress';
 import { createFallbackResultData } from '../utils/result';
+import { isSmallPhoneViewport } from '../utils/viewport';
 
 type ResultButton = {
   container: Phaser.GameObjects.Container;
@@ -76,7 +77,7 @@ export class ResultScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const centerX = width / 2;
     const isWide = width >= 760;
-    const isCompact = height < 780 && !isWide;
+    const isCompact = isSmallPhoneViewport() || (height < 780 && !isWide);
     const panelWidth = Math.min(width - 32, isWide ? 900 : 366);
     const accent = accentByType[this.result.resultType] ?? accentByType.draw;
 
@@ -121,15 +122,15 @@ export class ResultScene extends Phaser.Scene {
       cursorY = contentY + Math.max(Number(statsCard.getData('layoutHeight') ?? 0), Number(shareCard.getData('layoutHeight') ?? 0)) + 28;
     } else {
       statsCard = this.drawStatsPanel(centerX, cursorY, panelWidth);
-      cursorY += Number(statsCard.getData('layoutHeight') ?? 154) + (isCompact ? 10 : 14);
+      cursorY += Number(statsCard.getData('layoutHeight') ?? 154) + (isCompact ? 8 : 14);
       shareCard = this.drawShareCard(centerX, cursorY, panelWidth);
-      cursorY += Number(shareCard.getData('layoutHeight') ?? 138) + 24;
+      cursorY += Number(shareCard.getData('layoutHeight') ?? 138) + (isCompact ? 16 : 24);
     }
 
     const gridWidth = Math.min(panelWidth, isWide ? 620 : 336);
     const halfWidth = (gridWidth - 10) / 2;
     const buttonHeight = Math.max(UI.minButtonHeight, 54);
-    const rowGap = isCompact ? 58 : 64;
+    const rowGap = isCompact ? 54 : 64;
     const buttonStartY = Math.max(cursorY, isWide ? height - UI.safeBottom - 246 : cursorY);
     const textY = buttonStartY + buttonHeight / 2;
     const imageY = textY + rowGap;
@@ -173,7 +174,7 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.createOfficialLink(centerX, Math.min(height - UI.safeBottom - 16, retryY + rowGap - 10), Math.min(width * 0.82, 330));
+    this.createOfficialLink(centerX, Math.min(height - UI.safeBottom - 12, retryY + rowGap - 10), Math.min(width * 0.82, 330));
     this.playIntroTweens(title, titleCard, statsCard, shareCard);
   }
 
@@ -203,7 +204,7 @@ export class ResultScene extends Phaser.Scene {
 
   private drawTitleCard(centerX: number, y: number, width: number, accent: { badge: number }): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
-    const height = this.scale.height < 780 && this.scale.width < 760 ? 92 : 102;
+    const height = isSmallPhoneViewport() || (this.scale.height < 780 && this.scale.width < 760) ? 92 : 102;
     const shadow = this.add.rectangle(4, 6, width, height, 0x4b2819, 0.9).setOrigin(0.5, 0);
     const paper = this.add.rectangle(0, 0, width, height, COLORS.paper, 1).setOrigin(0.5, 0);
     paper.setStrokeStyle(3, 0x3a2417, 0.9);
@@ -257,8 +258,8 @@ export class ResultScene extends Phaser.Scene {
 
   private drawStatsPanel(centerX: number, y: number, width: number): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
-    const compact = this.scale.height < 780 && this.scale.width < 760;
-    const height = compact ? 146 : 176;
+    const compact = isSmallPhoneViewport() || (this.scale.height < 780 && this.scale.width < 760);
+    const height = compact ? 132 : 176;
     const shadow = this.add.rectangle(4, 5, width, height, COLORS.paperShadow, 1).setOrigin(0.5, 0);
     const paper = this.add.rectangle(0, 0, width, height, COLORS.paper, 1).setOrigin(0.5, 0);
     paper.setStrokeStyle(2, 0xd8b8a0, 0.9);
@@ -274,7 +275,7 @@ export class ResultScene extends Phaser.Scene {
 
     container.add([shadow, paper]);
     rows.forEach(([label, value], index) => {
-      const rowY = (compact ? 14 : 18) + index * (compact ? 23 : 26);
+      const rowY = (compact ? 13 : 18) + index * (compact ? 21 : 26);
       const labelText = this.add
         .text(-width / 2 + 24, rowY, label, {
           fontFamily: UI.fontFamily,
@@ -302,8 +303,8 @@ export class ResultScene extends Phaser.Scene {
 
   private drawShareCard(centerX: number, y: number, width: number): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
-    const compact = this.scale.height < 780 && this.scale.width < 760;
-    const height = compact ? 132 : 184;
+    const compact = isSmallPhoneViewport() || (this.scale.height < 780 && this.scale.width < 760);
+    const height = compact ? 112 : 184;
     const background = this.add.rectangle(0, 0, width, height, 0x2d2119, 0.9).setOrigin(0.5, 0);
     background.setStrokeStyle(2, 0xffe28a, 0.7);
     const heading = this.add
@@ -315,9 +316,9 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
     const summary = this.add
-      .text(0, compact ? 38 : 42, this.result.summary, {
+      .text(0, compact ? 34 : 42, this.result.summary, {
         fontFamily: UI.fontFamily,
-        fontSize: compact ? '13px' : '15px',
+        fontSize: compact ? '12px' : '15px',
         fontStyle: '900',
         color: '#fff8dc',
         align: 'center',
@@ -327,7 +328,7 @@ export class ResultScene extends Phaser.Scene {
     const achieved = this.result.missions.filter((item) => item.achieved).slice(0, compact ? 1 : 2);
     const missionLine = achieved.length > 0 ? `達成: ${achieved.map((item) => item.mission.title).join(' / ')}` : `称号: ${this.result.unlockedBadgeCount}種  ミッション: ${this.result.achievedMissionCount}/${this.result.missionTotal}`;
     const missions = this.add
-      .text(0, compact ? 72 : 96, missionLine, {
+      .text(0, compact ? 64 : 96, missionLine, {
         fontFamily: UI.fontFamily,
         fontSize: compact ? '10px' : '12px',
         fontStyle: '900',
@@ -337,7 +338,7 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
     const sharePreview = this.add
-      .text(0, compact ? 98 : 128, this.buildSharePreview(), {
+      .text(0, compact ? 86 : 128, this.buildSharePreview(), {
         fontFamily: UI.fontFamily,
         fontSize: compact ? '8px' : '10px',
         fontStyle: '800',

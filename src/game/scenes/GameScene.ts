@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, POINTS_TO_WIN, ROUND_LIMIT, SHOT, STAGE_BALANCE, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI } from '../constants';
+import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, FIXED_TABLE_BOUNDS, POINTS_TO_WIN, ROUND_LIMIT, SHOT, STAGE_BALANCE, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI } from '../constants';
 import { Eraser } from '../objects/Eraser';
 import type { AimState, CpuShotConfig, EndReason, GameSceneData, MatchPointState, PlayState, RunStats, StageOpponent, TableBounds, Winner } from '../types';
 import { playSound } from '../utils/audio';
@@ -41,6 +41,7 @@ export class GameScene extends Phaser.Scene {
   private lastCollisionAt = 0;
   private lastObstacleHitAt = 0;
   private resolvingPoint = false;
+  private canCheckOutOfTable = false;
 
   constructor() {
     super('GameScene');
@@ -60,6 +61,7 @@ export class GameScene extends Phaser.Scene {
     this.pointState = { playerPoints: 0, cpuPoints: 0, pointsToWin: POINTS_TO_WIN };
     this.lastShotBy = 'draw';
     this.resolvingPoint = false;
+    this.canCheckOutOfTable = false;
     this.turnLock = false;
     this.table = this.calculateTable();
     this.createLayers();
@@ -73,6 +75,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.handleResize, this);
     });
+    this.armOutOfTableGrace();
     this.startPlayerTurn();
   }
 
@@ -229,7 +232,7 @@ export class GameScene extends Phaser.Scene {
 
   private getStartPositions(): { playerStart: Phaser.Math.Vector2; cpuStart: Phaser.Math.Vector2 } {
     const balance = this.getStageBalance();
-    const minEdge = Math.min(92, Math.max(80, this.table.height * 0.18));
+    const minEdge = 92;
     const clampX = (ratio: number) => Phaser.Math.Clamp(this.table.left + this.table.width * ratio, this.table.left + minEdge, this.table.right - minEdge);
     const clampY = (ratio: number) => Phaser.Math.Clamp(this.table.top + this.table.height * ratio, this.table.top + minEdge, this.table.bottom - minEdge);
 
@@ -258,12 +261,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.stage === 2) {
-      this.createStaticObstacle('鉛筆', this.table.left + this.table.width * 0.58, this.table.top + this.table.height * 0.5, Math.min(150, this.table.width * 0.42), 18, 0xf1c64f, 0x7a4a1f);
+      this.createStaticObstacle('鉛筆', this.table.left + this.table.width * 0.68, this.table.top + this.table.height * 0.5, 126, 18, 0xf1c64f, 0x7a4a1f);
       return;
     }
 
-    this.createStaticObstacle('定規', this.table.left + this.table.width * 0.5, this.table.top + this.table.height * 0.48, Math.min(184, this.table.width * 0.5), 22, 0x86d8d0, 0x286d67);
-    this.createStaticObstacle('筆箱', this.table.left + this.table.width * 0.28, this.table.top + this.table.height * 0.5, 54, 96, 0xd98c5f, 0x79452c);
+    this.createStaticObstacle('定規', this.table.left + this.table.width * 0.66, this.table.top + this.table.height * 0.52, 132, 22, 0x86d8d0, 0x286d67);
   }
 
   private createStaticObstacle(label: string, x: number, y: number, width: number, height: number, color: number, stroke: number): void {
@@ -406,14 +408,16 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const from = new Phaser.Math.Vector2(this.cpu.x, this.cpu.y);
-    const to = new Phaser.Math.Vector2(this.player.x, this.player.y);
-    const direction = to.subtract(from).normalize();
-    const angleOffset = Phaser.Math.DegToRad(Phaser.Math.Between(-this.cpuShotConfig.aimRandomAngleDeg, this.cpuShotConfig.aimRandomAngleDeg));
-    direction.rotate(angleOffset);
+    const direction = this.chooseCpuShotDirection();
     const riskyShotRate = CPU_BY_DIFFICULTY[this.opponent.difficulty].riskyShotRate;
     const riskyBoost = Phaser.Math.Between(0, 100) < riskyShotRate ? 120 : 0;
-    const power = this.cpuShotConfig.basePower + Phaser.Math.Between(-this.cpuShotConfig.powerRandom, this.cpuShotConfig.powerRandom) + riskyBoost;
+    const cpuEdge = edgeDistance(this.cpu.x, this.cpu.y, this.table);
+    const edgePenalty = cpuEdge < 96 ? 0.76 : 1;
+    const power = Phaser.Math.Clamp(
+      (this.cpuShotConfig.basePower + Phaser.Math.Between(-this.cpuShotConfig.powerRandom, this.cpuShotConfig.powerRandom) + riskyBoost) * edgePenalty,
+      210,
+      this.stage === 3 ? 440 : 500,
+    );
     const body = this.cpu.body as Phaser.Physics.Arcade.Body;
 
     body.setVelocity(direction.x * power, direction.y * power);
@@ -424,6 +428,60 @@ export class GameScene extends Phaser.Scene {
     this.tweenShotSquash(this.cpu);
     this.state = 'cpuTurn';
     this.updateTurnText('cpuTurn');
+  }
+
+  private chooseCpuShotDirection(): Phaser.Math.Vector2 {
+    const cpuPosition = new Phaser.Math.Vector2(this.cpu.x, this.cpu.y);
+    const playerPosition = new Phaser.Math.Vector2(this.player.x, this.player.y);
+    const center = new Phaser.Math.Vector2((this.table.left + this.table.right) / 2, (this.table.top + this.table.bottom) / 2);
+    const base = playerPosition.subtract(cpuPosition);
+    if (base.lengthSq() <= 0.001) {
+      return center.subtract(cpuPosition).normalize();
+    }
+
+    const baseDirection = base.normalize();
+    const edge = edgeDistance(this.cpu.x, this.cpu.y, this.table);
+    const centerDirection = center.subtract(cpuPosition).normalize();
+    const candidateAngles = [-15, -8, 0, 8, 15];
+    let bestDirection = baseDirection.clone();
+    let bestScore = -Infinity;
+
+    candidateAngles.forEach((angle) => {
+      const candidate = baseDirection.clone().rotate(Phaser.Math.DegToRad(angle));
+      if (edge < 96) {
+        candidate.lerp(centerDirection, 0.45).normalize();
+      }
+      const score = this.scoreCpuDirection(candidate, edge, centerDirection);
+      if (score > bestScore) {
+        bestScore = score;
+        bestDirection = candidate.clone().normalize();
+      }
+    });
+
+    if (!Number.isFinite(bestDirection.x) || !Number.isFinite(bestDirection.y) || bestScore < -40) {
+      return centerDirection;
+    }
+
+    return bestDirection;
+  }
+
+  private scoreCpuDirection(direction: Phaser.Math.Vector2, edge: number, centerDirection: Phaser.Math.Vector2): number {
+    const lookAhead = new Phaser.Math.Vector2(this.cpu.x + direction.x * 112, this.cpu.y + direction.y * 112);
+    let score = 0;
+    if (isPointOutsideTable(lookAhead.x, lookAhead.y, this.table)) {
+      score -= 120;
+    }
+    score += direction.dot(centerDirection) * (edge < 96 ? 70 : 20);
+    score += edge * 0.08;
+
+    this.obstacles.forEach((obstacle) => {
+      const distance = Phaser.Math.Distance.Between(lookAhead.x, lookAhead.y, obstacle.x, obstacle.y);
+      if (distance < Math.max(obstacle.width, obstacle.height) * 0.62) {
+        score -= 24;
+      }
+    });
+
+    return score;
   }
 
   private handleEraserCollision(): void {
@@ -456,6 +514,10 @@ export class GameScene extends Phaser.Scene {
 
   private checkFallOrStop(): void {
     if (this.resolvingPoint) {
+      return;
+    }
+
+    if (!this.canCheckOutOfTable) {
       return;
     }
 
@@ -584,6 +646,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetForNextPoint(): void {
+    this.effectGraphics.clear();
     const { playerStart, cpuStart } = this.getStartPositions();
     this.player.revive();
     this.cpu.revive();
@@ -593,7 +656,15 @@ export class GameScene extends Phaser.Scene {
     this.applyStagePhysics(this.cpu);
     this.round = 1;
     this.resolvingPoint = false;
+    this.armOutOfTableGrace();
     this.startPlayerTurn();
+  }
+
+  private armOutOfTableGrace(): void {
+    this.canCheckOutOfTable = false;
+    this.time.delayedCall(500, () => {
+      this.canCheckOutOfTable = true;
+    });
   }
 
   private finishGame(winner: Winner, reason: EndReason): void {
@@ -933,22 +1004,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private calculateTable(): TableBounds {
-    const { width, height } = this.scale;
-    const left = TABLE.marginX;
-    const right = width - TABLE.marginX;
-    const top = Math.max(TABLE.top, UI.safeTop + 118, height * 0.17);
-    const availableHeight = height - top - TABLE.bottomReserved;
-    const tableHeight = Phaser.Math.Clamp(availableHeight, Math.min(TABLE.minHeight, height * 0.48), height * TABLE.maxHeightRatio);
-    const bottom = top + tableHeight;
-
-    return {
-      left,
-      right,
-      top,
-      bottom,
-      width: right - left,
-      height: bottom - top,
-    };
+    return { ...FIXED_TABLE_BOUNDS };
   }
 
   private handleResize(): void {

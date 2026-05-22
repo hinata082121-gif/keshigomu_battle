@@ -6,16 +6,17 @@ import { RoundClearScene } from './scenes/RoundClearScene';
 import { StoryScene } from './scenes/StoryScene';
 import { TitleScene } from './scenes/TitleScene';
 import { TutorialScene } from './scenes/TutorialScene';
+import { WORLD_HEIGHT, WORLD_WIDTH } from './constants';
 
 export const createGameConfig = (parent: HTMLElement): Phaser.Types.Core.GameConfig => ({
   type: Phaser.AUTO,
   parent,
   backgroundColor: '#2a1a12',
   scale: {
-    mode: Phaser.Scale.RESIZE,
+    mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width: WORLD_WIDTH,
+    height: WORLD_HEIGHT,
   },
   physics: {
     default: 'arcade',

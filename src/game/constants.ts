@@ -8,6 +8,8 @@ export const ENGLISH_TITLE = 'Eraser Battle';
 export const ROUND_LIMIT = 5;
 export const STAGE_LIMIT = 3;
 export const POINTS_TO_WIN = 2;
+export const WORLD_WIDTH = 390;
+export const WORLD_HEIGHT = 740;
 
 export const STAGE_OPPONENTS = [
   {
@@ -39,10 +41,19 @@ export const STAGE_OPPONENTS = [
 export const UI = {
   safeX: 20,
   safeTop: 16,
-  safeBottom: 24,
+  safeBottom: 44,
   minButtonHeight: 56,
   panelRadius: 8,
   fontFamily: '"Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif',
+};
+
+export const FIXED_TABLE_BOUNDS = {
+  left: 30,
+  right: 360,
+  top: 184,
+  bottom: 548,
+  width: 330,
+  height: 364,
 };
 
 export const TABLE = {
@@ -79,29 +90,29 @@ export const CPU = {
 
 export const CPU_BY_DIFFICULTY = {
   easy: {
-    basePower: 300,
-    powerRandom: 170,
+    basePower: 280,
+    powerRandom: 140,
     aimRandomAngleDeg: 26,
     riskyShotRate: 18,
   },
   normal: {
-    basePower: 360,
-    powerRandom: 140,
+    basePower: 330,
+    powerRandom: 120,
     aimRandomAngleDeg: 18,
     riskyShotRate: 14,
   },
   hard: {
-    basePower: 410,
-    powerRandom: 110,
-    aimRandomAngleDeg: 13,
-    riskyShotRate: 10,
+    basePower: 370,
+    powerRandom: 100,
+    aimRandomAngleDeg: 14,
+    riskyShotRate: 6,
   },
 } as const;
 
 export const STAGE_BALANCE = {
   1: { maxPower: 560, drag: 350, bounce: 0.68, stopSpeedThreshold: 17, playerXRatio: 0.5, playerYRatio: 0.66, cpuXRatio: 0.5, cpuYRatio: 0.34 },
   2: { maxPower: 600, drag: 330, bounce: 0.7, stopSpeedThreshold: 16, playerXRatio: 0.43, playerYRatio: 0.65, cpuXRatio: 0.57, cpuYRatio: 0.35 },
-  3: { maxPower: 620, drag: 315, bounce: 0.72, stopSpeedThreshold: 15, playerXRatio: 0.5, playerYRatio: 0.63, cpuXRatio: 0.5, cpuYRatio: 0.37 },
+  3: { maxPower: 600, drag: 335, bounce: 0.7, stopSpeedThreshold: 16, playerXRatio: 0.5, playerYRatio: 0.67, cpuXRatio: 0.5, cpuYRatio: 0.33 },
 } as const;
 
 export const COLORS = {

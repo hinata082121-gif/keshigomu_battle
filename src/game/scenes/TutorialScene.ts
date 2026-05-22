@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, ERASER, SHOT, UI } from '../constants';
 import { playSound } from '../utils/audio';
+import { isSmallPhoneViewport } from '../utils/viewport';
 
 const tutorialSteps = [
   {
@@ -40,13 +41,14 @@ export class TutorialScene extends Phaser.Scene {
     this.children.removeAll();
     const { width, height } = this.scale;
     const centerX = width / 2;
+    const isCompact = isSmallPhoneViewport() || height <= 760;
     this.drawBackground(width, height);
     const step = tutorialSteps[this.stepIndex] ?? tutorialSteps[0];
 
     this.add
       .text(centerX, UI.safeTop + 20, '遊び方', {
         fontFamily: UI.fontFamily,
-        fontSize: `${Math.min(42, Math.max(32, width * 0.1))}px`,
+        fontSize: `${isCompact ? 30 : Math.min(42, Math.max(32, width * 0.1))}px`,
         fontStyle: '900',
         color: '#fff4cf',
         stroke: '#3c2415',
@@ -54,7 +56,7 @@ export class TutorialScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
     this.add
-      .text(centerX, UI.safeTop + 76, `${this.stepIndex + 1} / ${tutorialSteps.length}`, {
+      .text(centerX, UI.safeTop + (isCompact ? 64 : 76), `${this.stepIndex + 1} / ${tutorialSteps.length}`, {
         fontFamily: UI.fontFamily,
         fontSize: '16px',
         fontStyle: '900',
@@ -65,15 +67,15 @@ export class TutorialScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     const panelWidth = Math.min(width - 34, width > 700 ? 590 : 360);
-    const panelY = UI.safeTop + 96;
-    const cardHeight = Math.min(height - panelY - UI.safeBottom - 104, 460);
+    const panelY = UI.safeTop + (isCompact ? 86 : 96);
+    const cardHeight = Math.min(height - panelY - UI.safeBottom - (isCompact ? 116 : 104), isCompact ? 368 : 460);
     this.drawPanel(centerX, panelY, panelWidth, cardHeight);
-    this.drawTutorialDesk(centerX, panelY + 36, panelWidth - 44, Math.min(210, cardHeight * 0.46), this.stepIndex);
+    this.drawTutorialDesk(centerX, panelY + (isCompact ? 24 : 36), panelWidth - 44, Math.min(isCompact ? 156 : 210, cardHeight * 0.45), this.stepIndex);
 
     this.add
-      .text(centerX, panelY + Math.min(268, cardHeight * 0.57), step.title, {
+      .text(centerX, panelY + Math.min(isCompact ? 196 : 268, cardHeight * (isCompact ? 0.54 : 0.57)), step.title, {
         fontFamily: UI.fontFamily,
-        fontSize: `${width < 380 ? 21 : 24}px`,
+        fontSize: `${isCompact ? 22 : width < 380 ? 21 : 24}px`,
         fontStyle: '900',
         color: '#2d2119',
         align: 'center',
@@ -82,9 +84,9 @@ export class TutorialScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     this.add
-      .text(centerX, panelY + Math.min(320, cardHeight * 0.69), step.body, {
+      .text(centerX, panelY + Math.min(isCompact ? 240 : 320, cardHeight * (isCompact ? 0.66 : 0.69)), step.body, {
         fontFamily: UI.fontFamily,
-        fontSize: `${width < 380 ? 15 : 17}px`,
+        fontSize: `${isCompact ? 18 : width < 380 ? 16 : 18}px`,
         fontStyle: '800',
         color: '#30231b',
         align: 'center',
@@ -102,14 +104,17 @@ export class TutorialScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    const hintY = Math.min(height - UI.safeBottom - 140, panelY + cardHeight + 12);
+    const hintBackground = this.add.rectangle(centerX, hintY + 14, Math.min(panelWidth, 340), 32, 0x2d2119, 0.88).setOrigin(0.5);
+    hintBackground.setStrokeStyle(2, 0xffe28a, 0.5);
     this.add
-      .text(centerX, Math.min(height - UI.safeBottom - 146, panelY + cardHeight + 18), `短いスワイプでも動く / 最大 POWER ${Math.round((SHOT.maxPower / 10) * 10)}`, {
+      .text(centerX, hintY, `短いスワイプで安全 / 長いほど強い / 最大 POWER ${Math.round((SHOT.maxPower / 10) * 10)}`, {
         fontFamily: UI.fontFamily,
-        fontSize: '12px',
+        fontSize: isCompact ? '11px' : '12px',
         fontStyle: '900',
-        color: '#ffe28a',
+        color: '#fff8dc',
         align: 'center',
-        wordWrap: { width: panelWidth },
+        wordWrap: { width: panelWidth - 22 },
       })
       .setOrigin(0.5, 0);
 
@@ -117,7 +122,7 @@ export class TutorialScene extends Phaser.Scene {
       this.scene.start('GameScene', { stage: 1 });
     });
 
-    this.createButton(centerX, height - UI.safeBottom - 78, Math.min(width * 0.82, 330), this.stepIndex === tutorialSteps.length - 1 ? '勝負開始！' : '次へ', () => {
+    this.createButton(centerX, height - UI.safeBottom - (isCompact ? 62 : 72), Math.min(width * 0.82, 330), this.stepIndex === tutorialSteps.length - 1 ? '勝負開始！' : '次へ', () => {
       if (this.stepIndex < tutorialSteps.length - 1) {
         this.stepIndex += 1;
         this.draw();
