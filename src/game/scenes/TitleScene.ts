@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, ENGLISH_TITLE, GAME_SUBTITLE, GAME_TITLE, OFFICIAL_SITE_URL, TITLE_COPY, UI } from '../constants';
+import { COLORS, ENGLISH_TITLE, GAME_SUBTITLE, GAME_TITLE, OFFICIAL_SITE_URL, TITLE_COPY, UI, WORLD } from '../constants';
 import { isMuted, playSound, toggleMuted } from '../utils/audio';
 import { MISSIONS, loadPlayerProgress, pickRecommendedMission } from '../utils/progress';
 
@@ -21,7 +21,7 @@ export class TitleScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const safeTop = UI.safeTop + 8;
     const safeBottom = UI.safeBottom + 12;
-    const centerX = width / 2;
+    const centerX = WORLD.centerX;
 
     this.drawDeskBackground(width, height);
     this.drawDecorativeErasers(width, height);

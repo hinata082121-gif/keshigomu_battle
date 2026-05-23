@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, GAME_TITLE, STAGE_OPPONENTS, UI } from '../constants';
+import { COLORS, GAME_TITLE, STAGE_OPPONENTS, UI, WORLD } from '../constants';
 import { playSound } from '../utils/audio';
 
 export class StoryScene extends Phaser.Scene {
@@ -18,7 +18,7 @@ export class StoryScene extends Phaser.Scene {
   private draw(): void {
     this.children.removeAll();
     const { width, height } = this.scale;
-    const centerX = width / 2;
+    const centerX = WORLD.centerX;
     this.drawClassroomBackground(width, height);
 
     const panelWidth = Math.min(width - 34, width > 700 ? 560 : 358);

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, ERASER, SHOT, UI } from '../constants';
+import { COLORS, ERASER, SHOT, UI, WORLD } from '../constants';
 import { playSound } from '../utils/audio';
 import { isSmallPhoneViewport } from '../utils/viewport';
 
@@ -40,7 +40,7 @@ export class TutorialScene extends Phaser.Scene {
   private draw(): void {
     this.children.removeAll();
     const { width, height } = this.scale;
-    const centerX = width / 2;
+    const centerX = WORLD.centerX;
     const isCompact = isSmallPhoneViewport() || height <= 760;
     this.drawBackground(width, height);
     const step = tutorialSteps[this.stepIndex] ?? tutorialSteps[0];

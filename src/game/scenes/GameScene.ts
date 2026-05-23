@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, FIXED_TABLE_BOUNDS, POINTS_TO_WIN, ROUND_LIMIT, SHOT, STAGE_BALANCE, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI } from '../constants';
+import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, FIXED_TABLE_BOUNDS, POINTS_TO_WIN, ROUND_LIMIT, SHOT, STAGE_BALANCE, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI, WORLD } from '../constants';
 import { Eraser } from '../objects/Eraser';
 import type { AimState, CpuShotConfig, EndReason, GameSceneData, MatchPointState, PlayState, RunStats, StageOpponent, TableBounds, Winner } from '../types';
 import { playSound } from '../utils/audio';
@@ -115,7 +115,7 @@ export class GameScene extends Phaser.Scene {
     this.drawUiChrome();
 
     this.titleText = this.add
-      .text(width / 2, UI.safeTop + 10, '机上決戦！消しゴム落とし', {
+      .text(WORLD.centerX, UI.safeTop + 10, '机上決戦！消しゴム落とし', {
         fontFamily: UI.fontFamily,
         fontSize: `${width < 420 ? 18 : 21}px`,
         fontStyle: '900',
@@ -148,7 +148,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(80);
 
     this.messageText = this.add
-      .text(width / 2, UI.safeTop + 86, '', {
+      .text(WORLD.centerX, UI.safeTop + 86, '', {
         fontFamily: UI.fontFamily,
         fontSize: '14px',
         fontStyle: '800',
@@ -160,7 +160,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(80);
 
     this.helpText = this.add
-      .text(width / 2, this.scale.height - UI.safeBottom - 58, '', {
+      .text(WORLD.centerX, this.scale.height - UI.safeBottom - 58, '', {
         fontFamily: UI.fontFamily,
         fontSize: '18px',
         fontStyle: '800',
@@ -172,7 +172,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(80);
 
     this.subHelpText = this.add
-      .text(width / 2, this.scale.height - UI.safeBottom - 30, '', {
+      .text(WORLD.centerX, this.scale.height - UI.safeBottom - 30, '', {
         fontFamily: UI.fontFamily,
         fontSize: '12px',
         fontStyle: '800',
@@ -184,7 +184,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(80);
 
     this.powerText = this.add
-      .text(width / 2, this.table.bottom - 34, '', {
+      .text(WORLD.centerX, this.table.bottom - 34, '', {
         fontFamily: UI.fontFamily,
         fontSize: '13px',
         fontStyle: '900',
@@ -875,7 +875,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.flash(130, isWin ? 255 : 255, isWin ? 224 : 156, isWin ? 107 : 69, false);
     this.cameras.main.shake(isWin ? 170 : 130, isWin ? 0.006 : 0.004);
     const burst = this.add.graphics().setDepth(90);
-    const centerX = this.scale.width / 2;
+    const centerX = WORLD.centerX;
     const centerY = this.table.top + this.table.height * 0.42;
     burst.fillStyle(color, 0.95);
     burst.fillCircle(centerX, centerY, 44);
@@ -1027,17 +1027,17 @@ export class GameScene extends Phaser.Scene {
       this.registerObstacleColliders();
     }
 
-    this.titleText.setPosition(this.scale.width / 2, UI.safeTop + 10);
+    this.titleText.setPosition(WORLD.centerX, UI.safeTop + 10);
     this.titleText.setFontSize(this.scale.width < 420 ? 18 : 21);
     this.roundText.setPosition(UI.safeX + 12, UI.safeTop + 54);
     this.statusText.setPosition(this.scale.width - UI.safeX - 12, UI.safeTop + 54);
-    this.messageText.setPosition(this.scale.width / 2, UI.safeTop + 86);
+    this.messageText.setPosition(WORLD.centerX, UI.safeTop + 86);
     this.messageText.setWordWrapWidth(Math.min(this.scale.width - 56, 340));
-    this.helpText.setPosition(this.scale.width / 2, this.scale.height - UI.safeBottom - 58);
+    this.helpText.setPosition(WORLD.centerX, this.scale.height - UI.safeBottom - 58);
     this.helpText.setWordWrapWidth(Math.min(this.scale.width - 34, 360));
-    this.subHelpText.setPosition(this.scale.width / 2, this.scale.height - UI.safeBottom - 30);
+    this.subHelpText.setPosition(WORLD.centerX, this.scale.height - UI.safeBottom - 30);
     this.subHelpText.setWordWrapWidth(Math.min(this.scale.width - 42, 340));
-    this.powerText.setPosition(this.scale.width / 2, this.table.bottom - 34);
+    this.powerText.setPosition(WORLD.centerX, this.table.bottom - 34);
   }
 
   private drawUiChrome(): void {

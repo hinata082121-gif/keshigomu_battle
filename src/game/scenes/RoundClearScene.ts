@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, STAGE_LIMIT, STAGE_OPPONENTS, UI } from '../constants';
+import { COLORS, STAGE_LIMIT, STAGE_OPPONENTS, UI, WORLD } from '../constants';
 import type { ResultData } from '../types';
 import { playSound } from '../utils/audio';
 import { createFallbackResultData } from '../utils/result';
@@ -34,7 +34,7 @@ export class RoundClearScene extends Phaser.Scene {
   private draw(): void {
     this.children.removeAll();
     const { width, height } = this.scale;
-    const centerX = width / 2;
+    const centerX = WORLD.centerX;
     const isCompact = isSmallPhoneViewport() || height <= 760;
     const nextStage = Math.min(this.result.stage + 1, STAGE_LIMIT);
     const nextOpponent = STAGE_OPPONENTS.find((opponent) => opponent.stage === nextStage);

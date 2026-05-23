@@ -14,9 +14,7 @@
 }
 
 html,
-body,
-#app,
-#game-container {
+body {
   width: 100%;
   height: var(--app-height);
   height: 100dvh;
@@ -32,6 +30,9 @@ body,
 body {
   position: fixed;
   inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100vw;
   height: var(--app-height);
   min-height: 100dvh;
@@ -46,19 +47,37 @@ body {
   -webkit-touch-callout: none;
 }
 
-#app,
+#app {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: var(--app-height);
+  height: 100dvh;
+  min-height: 100svh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 #game-container {
-  display: grid;
-  place-items: center;
+  position: relative;
+  width: 100%;
+  height: 100%;
   contain: layout size style;
+  overflow: hidden;
+  touch-action: none;
 }
 
 canvas {
   display: block;
+  margin: 0 auto;
   max-width: 100vw;
   max-height: var(--app-height);
   max-height: 100dvh;
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
   touch-action: none;
   user-select: none;
 }

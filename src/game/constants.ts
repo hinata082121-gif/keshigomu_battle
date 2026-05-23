@@ -10,6 +10,19 @@ export const STAGE_LIMIT = 3;
 export const POINTS_TO_WIN = 2;
 export const WORLD_WIDTH = 390;
 export const WORLD_HEIGHT = 740;
+export const CENTER_X = WORLD_WIDTH / 2;
+export const CENTER_Y = WORLD_HEIGHT / 2;
+export const WORLD = {
+  width: WORLD_WIDTH,
+  height: WORLD_HEIGHT,
+  centerX: CENTER_X,
+  centerY: CENTER_Y,
+} as const;
+
+export const cx = (offset = 0): number => CENTER_X + offset;
+export const cy = (offset = 0): number => CENTER_Y + offset;
+export const fullWidth = (margin = 24): number => WORLD_WIDTH - margin * 2;
+export const left = (margin = 24): number => margin;
 
 export const STAGE_OPPONENTS = [
   {

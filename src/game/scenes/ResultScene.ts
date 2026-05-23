@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, GAME_TITLE, GAME_URL, HASHTAGS, OFFICIAL_SITE_URL, UI } from '../constants';
+import { COLORS, GAME_TITLE, GAME_URL, HASHTAGS, OFFICIAL_SITE_URL, UI, WORLD } from '../constants';
 import type { ResultData, ResultImageData, ResultType } from '../types';
 import { playSound } from '../utils/audio';
 import { markResultImageSaved } from '../utils/progress';
@@ -75,7 +75,7 @@ export class ResultScene extends Phaser.Scene {
     this.children.removeAll();
     this.copyButton = undefined;
     const { width, height } = this.scale;
-    const centerX = width / 2;
+    const centerX = WORLD.centerX;
     const isWide = width >= 760;
     const isCompact = isSmallPhoneViewport() || (height < 780 && !isWide);
     const panelWidth = Math.min(width - 32, isWide ? 900 : 366);
