@@ -15,6 +15,7 @@ export type SceneKey =
   | 'TitleScene'
   | 'StoryScene'
   | 'TutorialScene'
+  | 'StrategySelectScene'
   | 'GameScene'
   | 'RoundClearScene'
   | 'ResultScene';
@@ -29,6 +30,20 @@ export type ShotGrade = 'god' | 'great' | 'normal' | 'danger' | 'selfDestruct' |
 
 export type StageDifficulty = 'easy' | 'normal' | 'hard';
 
+export type ShotType = 'safe' | 'normal' | 'power';
+
+export type StrategyType = 'safe' | 'power' | 'bounce';
+
+export interface Strategy {
+  id: StrategyType;
+  title: string;
+  description: string;
+  maxPowerMultiplier: number;
+  jitterMultiplier: number;
+  selfRiskMultiplier: number;
+  scoreBonusType: 'safe' | 'power' | 'bounce';
+}
+
 export interface StageOpponent {
   stage: number;
   name: string;
@@ -41,6 +56,7 @@ export interface StageOpponent {
 export interface GameSceneData {
   stage?: number;
   runStats?: RunStats;
+  strategy?: StrategyType;
 }
 
 export interface GameProgress {
@@ -79,8 +95,21 @@ export interface RunStats {
   reachedStage: number;
   clearedStages: number;
   obstacleHits: number;
+  pencilBouncePressure: number;
+  rulerBouncePoints: number;
+  safeShots: number;
+  normalShots: number;
+  powerShots: number;
+  safePointWins: number;
+  powerPointWins: number;
+  pressureEvents: number;
+  pressureStreakMax: number;
+  recoveries: number;
+  matchPointComebacks: number;
   maxDangerScore: number;
   savedResultImage: boolean;
+  strategyUsed?: StrategyType;
+  playStyleLabel: string;
 }
 
 export type ScoreRank = 'S' | 'A' | 'B' | 'C' | 'D';

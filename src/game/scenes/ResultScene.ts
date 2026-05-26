@@ -151,7 +151,7 @@ export class ResultScene extends Phaser.Scene {
       }
 
       this.transitionLocked = true;
-      this.scene.start('GameScene', { stage: 1 });
+      this.scene.start('StrategySelectScene', { stage: 1 });
     });
 
     this.createButton(centerX, retryY, gridWidth, 'タイトルへ戻る', 0xf7ead0, () => {
@@ -259,7 +259,7 @@ export class ResultScene extends Phaser.Scene {
   private drawStatsPanel(centerX: number, y: number, width: number): Phaser.GameObjects.Container {
     const container = this.add.container(centerX, y);
     const compact = isSmallPhoneViewport() || (this.scale.height < 780 && this.scale.width < 760);
-    const height = compact ? 132 : 176;
+    const height = compact ? 154 : 202;
     const shadow = this.add.rectangle(4, 5, width, height, COLORS.paperShadow, 1).setOrigin(0.5, 0);
     const paper = this.add.rectangle(0, 0, width, height, COLORS.paper, 1).setOrigin(0.5, 0);
     paper.setStrokeStyle(2, 0xd8b8a0, 0.9);
@@ -269,6 +269,7 @@ export class ResultScene extends Phaser.Scene {
       ['ランク', `${this.result.scoreResult.rank}${this.result.scoreResult.isBestScore ? ' / ベスト更新!' : ''}`],
       ['対戦', `${this.result.stage} / ${this.result.stageMax}  ${this.result.opponentName}`],
       ['ポイント', `${this.result.playerPoints} - ${this.result.cpuPoints}`],
+      ['傾向', this.result.runStats.playStyleLabel],
       ['ギリギリ度', `${this.result.dangerScore}%`],
       ['評価', this.result.shotGradeLabel],
     ];
@@ -582,10 +583,11 @@ export class ResultScene extends Phaser.Scene {
       ['対戦相手', data.opponentName],
       ['ギリギリ度', `${data.dangerScore}%`],
       ['ショット評価', data.shotGradeLabel],
+      ['プレイ傾向', this.result.runStats.playStyleLabel],
     ];
     context.textAlign = 'left';
     stats.forEach(([label, value], index) => {
-      const y = 598 + index * 58;
+      const y = 590 + index * 50;
       context.fillStyle = '#f6ead0';
       this.roundRect(context, 126, y - 38, 828, 48, 10);
       context.fill();

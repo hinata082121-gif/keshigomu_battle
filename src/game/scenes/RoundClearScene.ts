@@ -111,7 +111,7 @@ export class RoundClearScene extends Phaser.Scene {
         return;
       }
       this.locked = true;
-      this.scene.start('GameScene', { stage: nextStage, runStats: this.result.runStats });
+      this.scene.start('StrategySelectScene', { stage: nextStage, runStats: this.result.runStats });
     });
   }
 

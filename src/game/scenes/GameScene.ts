@@ -1,7 +1,24 @@
 import Phaser from 'phaser';
-import { COLORS, CPU, CPU_BY_DIFFICULTY, ERASER, FIXED_TABLE_BOUNDS, POINTS_TO_WIN, ROUND_LIMIT, SHOT, STAGE_BALANCE, STAGE_LIMIT, STAGE_OPPONENTS, TABLE, UI, WORLD } from '../constants';
+import {
+  COLORS,
+  CPU,
+  CPU_BY_DIFFICULTY,
+  DANGER_ZONE,
+  ERASER,
+  FIXED_TABLE_BOUNDS,
+  POINTS_TO_WIN,
+  ROUND_LIMIT,
+  SHOT,
+  STAGE_BALANCE,
+  STAGE_LIMIT,
+  STAGE_OPPONENTS,
+  STRATEGIES,
+  TABLE,
+  UI,
+  WORLD,
+} from '../constants';
 import { Eraser } from '../objects/Eraser';
-import type { AimState, CpuShotConfig, EndReason, GameSceneData, MatchPointState, PlayState, RunStats, StageOpponent, TableBounds, Winner } from '../types';
+import type { AimState, CpuShotConfig, EndReason, GameSceneData, MatchPointState, PlayState, RunStats, ShotType, StageOpponent, Strategy, TableBounds, Winner } from '../types';
 import { playSound } from '../utils/audio';
 import { createResultData } from '../utils/result';
 import { clampMagnitude, edgeDistance, isBodyStopped, isPointOutsideTable, powerFromSwipe, stopBody } from '../utils/physics';
@@ -13,6 +30,7 @@ export class GameScene extends Phaser.Scene {
   private round = 1;
   private opponent: StageOpponent = STAGE_OPPONENTS[0];
   private cpuShotConfig: CpuShotConfig = CPU_BY_DIFFICULTY.easy;
+  private strategy: Strategy = STRATEGIES[0];
   private table!: TableBounds;
   private player!: Eraser;
   private cpu!: Eraser;
@@ -31,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private headerGraphics!: Phaser.GameObjects.Graphics;
   private bottomGraphics!: Phaser.GameObjects.Graphics;
   private powerText!: Phaser.GameObjects.Text;
+  private feedbackText!: Phaser.GameObjects.Text;
   private graffiti: Phaser.GameObjects.Text[] = [];
   private obstacles: Phaser.GameObjects.Rectangle[] = [];
   private obstacleLabels: Phaser.GameObjects.Text[] = [];
@@ -42,6 +61,13 @@ export class GameScene extends Phaser.Scene {
   private lastObstacleHitAt = 0;
   private resolvingPoint = false;
   private canCheckOutOfTable = false;
+  private lastShotType: ShotType = 'normal';
+  private lastShotStartedDanger = false;
+  private lastPointHadObstacleHit = false;
+  private cpuWasPressuredThisPoint = false;
+  private playerWasDangerThisPoint = false;
+  private pressureStreak = 0;
+  private pointIntroShown = false;
 
   constructor() {
     super('GameScene');
@@ -51,8 +77,10 @@ export class GameScene extends Phaser.Scene {
     this.stage = Phaser.Math.Clamp(Number.isFinite(data?.stage) ? Number(data?.stage) : 1, 1, STAGE_LIMIT);
     this.opponent = STAGE_OPPONENTS.find((opponent) => opponent.stage === this.stage) ?? STAGE_OPPONENTS[0];
     this.cpuShotConfig = CPU_BY_DIFFICULTY[this.opponent.difficulty];
+    this.strategy = (STRATEGIES.find((strategy) => strategy.id === data?.strategy) ?? STRATEGIES[0]) as Strategy;
     this.runStats = normalizeRunStats(data?.runStats, this.stage);
     this.runStats.reachedStage = Math.max(this.runStats.reachedStage, this.stage);
+    this.runStats.strategyUsed = this.strategy.id;
   }
 
   create(): void {
@@ -63,6 +91,12 @@ export class GameScene extends Phaser.Scene {
     this.resolvingPoint = false;
     this.canCheckOutOfTable = false;
     this.turnLock = false;
+    this.lastShotType = 'normal';
+    this.lastShotStartedDanger = false;
+    this.lastPointHadObstacleHit = false;
+    this.cpuWasPressuredThisPoint = false;
+    this.playerWasDangerThisPoint = false;
+    this.pointIntroShown = false;
     this.table = this.calculateTable();
     this.createLayers();
     this.createUi();
@@ -95,6 +129,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.state === 'moving' || this.state === 'cpuTurn') {
+      this.trackPressureZones();
       this.checkFallOrStop();
     }
   }
@@ -196,6 +231,21 @@ export class GameScene extends Phaser.Scene {
       .setDepth(82)
       .setVisible(false);
 
+    this.feedbackText = this.add
+      .text(WORLD.centerX, this.table.top + 28, '', {
+        fontFamily: UI.fontFamily,
+        fontSize: '18px',
+        fontStyle: '900',
+        color: '#fff8dc',
+        stroke: '#2d2119',
+        strokeThickness: 5,
+        align: 'center',
+        wordWrap: { width: Math.min(width - 48, 330) },
+      })
+      .setOrigin(0.5)
+      .setDepth(84)
+      .setAlpha(0);
+
     this.updateTurnText('playerTurn');
   }
 
@@ -248,6 +298,62 @@ export class GameScene extends Phaser.Scene {
     body.setBounce(balance.bounce);
     body.setDrag(balance.drag);
     body.setMaxVelocity(ERASER.maxVelocity);
+  }
+
+  private getPlayerMaxPower(): number {
+    return Phaser.Math.Clamp(this.getStageBalance().maxPower * this.strategy.maxPowerMultiplier, 500, 630);
+  }
+
+  private getShotType(powerRate: number): ShotType {
+    if (powerRate < 0.45) {
+      return 'safe';
+    }
+    if (powerRate < 0.75) {
+      return 'normal';
+    }
+    return 'power';
+  }
+
+  private getShotJitter(shotType: ShotType, powerRate: number): number {
+    if (shotType === 'safe') {
+      return 0;
+    }
+    if (shotType === 'normal') {
+      return Phaser.Math.Linear(1, 3, Phaser.Math.Clamp((powerRate - 0.45) / 0.3, 0, 1)) * this.strategy.jitterMultiplier;
+    }
+    const edge = edgeDistance(this.player.x, this.player.y, this.table);
+    const edgeRisk = edge <= DANGER_ZONE.edge ? 2.2 * this.strategy.selfRiskMultiplier : 0;
+    return (Phaser.Math.Linear(4, 8, Phaser.Math.Clamp((powerRate - 0.75) / 0.25, 0, 1)) + edgeRisk) * this.strategy.jitterMultiplier;
+  }
+
+  private registerShotType(shotType: ShotType): void {
+    if (shotType === 'safe') {
+      this.runStats.safeShots += 1;
+    } else if (shotType === 'power') {
+      this.runStats.powerShots += 1;
+    } else {
+      this.runStats.normalShots += 1;
+    }
+  }
+
+  private getShotFeedback(shotType: ShotType): string {
+    if (shotType === 'safe') {
+      return 'SAFEショット';
+    }
+    if (shotType === 'power') {
+      return 'RISKショット';
+    }
+    return 'GOODショット';
+  }
+
+  private getShotColor(shotType: ShotType): number {
+    if (shotType === 'safe') {
+      return 0xbdebdc;
+    }
+    if (shotType === 'power') {
+      return 0xff7055;
+    }
+    return 0xfff0a5;
   }
 
   private createObstacles(): void {
@@ -349,22 +455,28 @@ export class GameScene extends Phaser.Scene {
     const swipe = this.aim.current.clone().subtract(this.aim.start);
     const clamped = clampMagnitude(swipe, SHOT.maxSwipeDistance);
     const distance = clamped.length();
-    const powerLimit = this.getStageBalance().maxPower;
+    const powerLimit = this.getPlayerMaxPower();
     const powerRatio = Phaser.Math.Clamp(distance / SHOT.maxSwipeDistance, 0, 1);
+    const shotType = this.getShotType(powerRatio);
     const direction = distance < 6 ? new Phaser.Math.Vector2(0, -1) : clamped.clone().normalize();
-    if (powerRatio > 0.82) {
-      direction.rotate(Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-4.5, 4.5)));
+    const jitter = this.getShotJitter(shotType, powerRatio);
+    if (jitter > 0) {
+      direction.rotate(Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-jitter, jitter)));
     }
     const power = powerFromSwipe(distance, powerLimit);
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
     body.setVelocity(direction.x * power, direction.y * power);
     this.runStats.totalShots += 1;
+    this.registerShotType(shotType);
+    this.lastShotType = shotType;
+    this.lastShotStartedDanger = edgeDistance(this.player.x, this.player.y, this.table) <= DANGER_ZONE.edge;
     this.lastShotBy = 'player';
     playSound('shot');
     this.spawnShotEffect(this.player.x, this.player.y, direction, power);
     this.tweenShotSquash(this.player);
-    if (power > powerLimit * 0.82) {
+    this.showQuickFeedback(this.getShotFeedback(shotType), this.getShotColor(shotType));
+    if (shotType === 'power') {
       this.cameras.main.shake(90, 0.004);
     }
     this.aim = undefined;
@@ -385,6 +497,10 @@ export class GameScene extends Phaser.Scene {
     this.aimGraphics.clear();
     this.powerText.setVisible(false);
     this.updateTurnText('playerTurn');
+    if (!this.pointIntroShown) {
+      this.pointIntroShown = true;
+      this.showQuickFeedback(this.getPointIntroText(), 0xffe28a);
+    }
   }
 
   private startCpuThinking(): void {
@@ -410,13 +526,15 @@ export class GameScene extends Phaser.Scene {
 
     const direction = this.chooseCpuShotDirection();
     const riskyShotRate = CPU_BY_DIFFICULTY[this.opponent.difficulty].riskyShotRate;
-    const riskyBoost = Phaser.Math.Between(0, 100) < riskyShotRate ? 120 : 0;
+    const playerEdge = edgeDistance(this.player.x, this.player.y, this.table);
+    const riskyBoost = this.stage === 2 && playerEdge < DANGER_ZONE.edge && Phaser.Math.Between(0, 100) < riskyShotRate ? 95 : 0;
     const cpuEdge = edgeDistance(this.cpu.x, this.cpu.y, this.table);
     const edgePenalty = cpuEdge < 96 ? 0.76 : 1;
+    const stagePowerMultiplier = this.stage === 1 ? Phaser.Math.FloatBetween(0.78, 0.98) : this.stage === 2 ? Phaser.Math.FloatBetween(0.95, 1.08) : Phaser.Math.FloatBetween(0.9, 1.02);
     const power = Phaser.Math.Clamp(
-      (this.cpuShotConfig.basePower + Phaser.Math.Between(-this.cpuShotConfig.powerRandom, this.cpuShotConfig.powerRandom) + riskyBoost) * edgePenalty,
-      210,
-      this.stage === 3 ? 440 : 500,
+      (this.cpuShotConfig.basePower + Phaser.Math.Between(-this.cpuShotConfig.powerRandom, this.cpuShotConfig.powerRandom) + riskyBoost) * edgePenalty * stagePowerMultiplier,
+      190,
+      this.stage === 3 ? 410 : 470,
     );
     const body = this.cpu.body as Phaser.Physics.Arcade.Body;
 
@@ -442,7 +560,16 @@ export class GameScene extends Phaser.Scene {
     const baseDirection = base.normalize();
     const edge = edgeDistance(this.cpu.x, this.cpu.y, this.table);
     const centerDirection = center.subtract(cpuPosition).normalize();
-    const candidateAngles = [-15, -8, 0, 8, 15];
+    if (this.stage === 1) {
+      return baseDirection.rotate(Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-this.cpuShotConfig.aimRandomAngleDeg, this.cpuShotConfig.aimRandomAngleDeg))).normalize();
+    }
+
+    if (this.stage === 2 && edge >= 96) {
+      const pressureAim = edgeDistance(this.player.x, this.player.y, this.table) <= DANGER_ZONE.edge ? baseDirection : baseDirection.clone().lerp(centerDirection, 0.08).normalize();
+      return pressureAim.rotate(Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-this.cpuShotConfig.aimRandomAngleDeg * 0.5, this.cpuShotConfig.aimRandomAngleDeg * 0.5))).normalize();
+    }
+
+    const candidateAngles = this.stage === 3 ? [-18, -10, -4, 0, 4, 10, 18] : [-15, -8, 0, 8, 15];
     let bestDirection = baseDirection.clone();
     let bestScore = -Infinity;
 
@@ -507,9 +634,46 @@ export class GameScene extends Phaser.Scene {
     this.lastObstacleHitAt = now;
     if (who === 'player' && this.lastShotBy === 'player') {
       this.runStats.obstacleHits += 1;
+      this.lastPointHadObstacleHit = true;
+      this.showQuickFeedback(this.stage === 3 ? '定規反射！' : '鉛筆バウンド！', 0xffe28a);
     }
+    const eraser = who === 'player' ? this.player : this.cpu;
+    const body = eraser.body as Phaser.Physics.Arcade.Body;
+    if (this.strategy.id === 'bounce' && who === 'player') {
+      body.velocity.scale(0.94);
+    }
+    const cappedVelocity = clampMagnitude(new Phaser.Math.Vector2(body.velocity.x, body.velocity.y), ERASER.maxVelocity);
+    body.setVelocity(cappedVelocity.x, cappedVelocity.y);
     playSound('hit');
     this.spawnImpactEffect(who === 'player' ? this.player.x : this.cpu.x, who === 'player' ? this.player.y : this.cpu.y);
+  }
+
+  private trackPressureZones(): void {
+    const cpuEdge = edgeDistance(this.cpu.x, this.cpu.y, this.table);
+    const playerEdge = edgeDistance(this.player.x, this.player.y, this.table);
+
+    if (!this.cpuWasPressuredThisPoint && cpuEdge <= DANGER_ZONE.edge) {
+      this.cpuWasPressuredThisPoint = true;
+      this.pressureStreak += 1;
+      this.runStats.pressureEvents += 1;
+      this.runStats.pressureStreakMax = Math.max(this.runStats.pressureStreakMax, this.pressureStreak);
+      if (this.lastPointHadObstacleHit && this.stage === 2) {
+        this.runStats.pencilBouncePressure += 1;
+      }
+      this.showQuickFeedback(cpuEdge <= DANGER_ZONE.critical ? '場外寸前！' : '追い込んだ！', 0xffd27b);
+    }
+
+    if (!this.playerWasDangerThisPoint && playerEdge <= DANGER_ZONE.edge) {
+      this.playerWasDangerThisPoint = true;
+      this.showQuickFeedback(playerEdge <= DANGER_ZONE.critical ? '自爆注意！' : '危ない！', 0xff9c45);
+    }
+
+    if (this.playerWasDangerThisPoint && this.lastShotStartedDanger && playerEdge > DANGER_ZONE.edge + 24 && this.state === 'moving') {
+      this.playerWasDangerThisPoint = false;
+      this.lastShotStartedDanger = false;
+      this.runStats.recoveries += 1;
+      this.showQuickFeedback('ナイス復帰！', 0xbdebdc);
+    }
   }
 
   private checkFallOrStop(): void {
@@ -610,9 +774,22 @@ export class GameScene extends Phaser.Scene {
     if (winner === 'player') {
       this.pointState.playerPoints += 1;
       this.runStats.playerPointsWon += 1;
+      if (this.lastShotType === 'safe') {
+        this.runStats.safePointWins += 1;
+      }
+      if (this.lastShotType === 'power') {
+        this.runStats.powerPointWins += 1;
+      }
+      if (this.lastPointHadObstacleHit && this.stage === 3) {
+        this.runStats.rulerBouncePoints += 1;
+      }
+      if (this.pointState.cpuPoints >= this.pointState.pointsToWin - 1) {
+        this.runStats.matchPointComebacks += 1;
+      }
     } else if (winner === 'cpu') {
       this.pointState.cpuPoints += 1;
       this.runStats.cpuPointsWon += 1;
+      this.pressureStreak = 0;
       if (reason === 'selfOut' || reason === 'doubleOut') {
         this.runStats.selfDestructs += 1;
       }
@@ -645,6 +822,37 @@ export class GameScene extends Phaser.Scene {
     this.spawnBattleOutcomeEffect(message, message.includes('取られ') ? 0x9ab6e8 : 0xffe06b);
   }
 
+  private getPointIntroText(): string {
+    if (this.pointState.playerPoints === this.pointState.pointsToWin - 1) {
+      return 'あと1本で勝利！';
+    }
+    if (this.pointState.cpuPoints === this.pointState.pointsToWin - 1) {
+      return '取られたら終わり！';
+    }
+    const pointNumber = this.pointState.playerPoints + this.pointState.cpuPoints + 1;
+    return pointNumber === 1 ? '1本目' : `${pointNumber}本目`;
+  }
+
+  private showQuickFeedback(message: string, color: number): void {
+    if (!this.feedbackText || this.state === 'result') {
+      return;
+    }
+
+    this.feedbackText.setText(message);
+    this.feedbackText.setColor(`#${color.toString(16).padStart(6, '0')}`);
+    this.feedbackText.setAlpha(1);
+    this.feedbackText.setScale(0.86);
+    this.tweens.killTweensOf(this.feedbackText);
+    this.tweens.add({
+      targets: this.feedbackText,
+      scale: 1,
+      alpha: 0,
+      delay: 720,
+      duration: 280,
+      ease: 'Sine.easeOut',
+    });
+  }
+
   private resetForNextPoint(): void {
     this.effectGraphics.clear();
     const { playerStart, cpuStart } = this.getStartPositions();
@@ -656,6 +864,12 @@ export class GameScene extends Phaser.Scene {
     this.applyStagePhysics(this.cpu);
     this.round = 1;
     this.resolvingPoint = false;
+    this.lastShotType = 'normal';
+    this.lastShotStartedDanger = false;
+    this.lastPointHadObstacleHit = false;
+    this.cpuWasPressuredThisPoint = false;
+    this.playerWasDangerThisPoint = false;
+    this.pointIntroShown = false;
     this.armOutOfTableGrace();
     this.startPlayerTurn();
   }
@@ -709,7 +923,7 @@ export class GameScene extends Phaser.Scene {
     const helpByState: Record<PlayState, string> = {
       title: '',
       ready: '準備中……',
-      playerTurn: 'HEISEIをスワイプして弾け！',
+      playerTurn: `${this.strategy.title}：HEISEIをスワイプ！`,
       aiming: '指を離すとショット！',
       moving: '判定中……',
       cpuThinking: 'CPUの番です',
@@ -730,7 +944,7 @@ export class GameScene extends Phaser.Scene {
       title: '',
       ready: '',
       playerTurn: '短くても動く / 長いほど強い',
-      aiming: '矢印が長いほど強いショット',
+      aiming: 'SAFE / GOOD / RISK を見て強さ調整',
       moving: 'ショット中は操作できません',
       cpuThinking: '0.7秒後にCPUが弾きます',
       cpuTurn: '2ポイント先取でステージ突破',
@@ -765,7 +979,8 @@ export class GameScene extends Phaser.Scene {
     const alpha = Phaser.Math.Clamp(powerRatio, 0.32, 1);
     const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, end.x, end.y);
     const headSize = 16;
-    const arrowColor = powerRatio > 0.78 ? 0xff7055 : powerRatio > 0.45 ? 0xfff0a5 : 0xbdebdc;
+    const shotType = this.getShotType(powerRatio);
+    const arrowColor = this.getShotColor(shotType);
 
     this.aimGraphics.clear();
     this.aimGraphics.lineStyle(10, 0x3d2417, 0.42);
@@ -779,10 +994,32 @@ export class GameScene extends Phaser.Scene {
     this.aimGraphics.lineTo(end.x - Math.cos(angle + 0.55) * headSize, end.y - Math.sin(angle + 0.55) * headSize);
     this.aimGraphics.closePath();
     this.aimGraphics.fillPath();
+    this.drawPowerMeter(powerRatio, shotType);
     this.powerText
-      .setText(`POWER ${Math.round(powerRatio * 100)}%`)
+      .setText(`${shotType === 'safe' ? 'SAFE' : shotType === 'normal' ? 'GOOD' : 'RISK'} ${Math.round(powerRatio * 100)}%`)
       .setPosition(Phaser.Math.Clamp(end.x, this.table.left + 54, this.table.right - 54), Phaser.Math.Clamp(end.y - 30, this.table.top + 28, this.table.bottom - 28))
       .setVisible(true);
+  }
+
+  private drawPowerMeter(powerRatio: number, shotType: ShotType): void {
+    const meterWidth = 186;
+    const meterHeight = 14;
+    const x = WORLD.centerX - meterWidth / 2;
+    const y = this.table.bottom - 27;
+    this.aimGraphics.fillStyle(0x2d2119, 0.82);
+    this.aimGraphics.fillRoundedRect(x - 6, y - 6, meterWidth + 12, meterHeight + 30, 6);
+    this.aimGraphics.fillStyle(0xbdebdc, 0.92);
+    this.aimGraphics.fillRect(x, y, meterWidth * 0.45, meterHeight);
+    this.aimGraphics.fillStyle(0xfff0a5, 0.92);
+    this.aimGraphics.fillRect(x + meterWidth * 0.45, y, meterWidth * 0.3, meterHeight);
+    this.aimGraphics.fillStyle(0xff7055, 0.92);
+    this.aimGraphics.fillRect(x + meterWidth * 0.75, y, meterWidth * 0.25, meterHeight);
+    this.aimGraphics.lineStyle(2, 0x3a2417, 0.9);
+    this.aimGraphics.strokeRect(x, y, meterWidth, meterHeight);
+    this.aimGraphics.fillStyle(0xffffff, 0.95);
+    this.aimGraphics.fillRect(x + Phaser.Math.Clamp(powerRatio, 0, 1) * meterWidth - 2, y - 4, 4, meterHeight + 8);
+    this.aimGraphics.lineStyle(2, this.getShotColor(shotType), 0.95);
+    this.aimGraphics.strokeRoundedRect(x - 4, y - 4, meterWidth + 8, meterHeight + 8, 4);
   }
 
   private drawTouchCue(): void {
@@ -943,6 +1180,13 @@ export class GameScene extends Phaser.Scene {
     this.tableGraphics.fillRoundedRect(this.table.left - TABLE.border, this.table.top - TABLE.border, this.table.width + TABLE.border * 2, this.table.height + TABLE.border * 2, 12);
     this.tableGraphics.fillStyle(COLORS.tableBase, 1);
     this.tableGraphics.fillRoundedRect(this.table.left, this.table.top, this.table.width, this.table.height, 7);
+    this.tableGraphics.fillStyle(0xff7055, 0.08);
+    this.tableGraphics.fillRect(this.table.left, this.table.top, this.table.width, DANGER_ZONE.edge);
+    this.tableGraphics.fillRect(this.table.left, this.table.bottom - DANGER_ZONE.edge, this.table.width, DANGER_ZONE.edge);
+    this.tableGraphics.fillRect(this.table.left, this.table.top, DANGER_ZONE.edge, this.table.height);
+    this.tableGraphics.fillRect(this.table.right - DANGER_ZONE.edge, this.table.top, DANGER_ZONE.edge, this.table.height);
+    this.tableGraphics.lineStyle(2, 0xff9c45, 0.26);
+    this.tableGraphics.strokeRoundedRect(this.table.left + DANGER_ZONE.edge, this.table.top + DANGER_ZONE.edge, this.table.width - DANGER_ZONE.edge * 2, this.table.height - DANGER_ZONE.edge * 2, 4);
     this.tableGraphics.fillStyle(0xffffff, 0.045);
     for (let y = this.table.top + 16; y < this.table.bottom - 12; y += 54) {
       this.tableGraphics.fillRect(this.table.left + 14, y, this.table.width - 28, 2);
@@ -1038,6 +1282,8 @@ export class GameScene extends Phaser.Scene {
     this.subHelpText.setPosition(WORLD.centerX, this.scale.height - UI.safeBottom - 30);
     this.subHelpText.setWordWrapWidth(Math.min(this.scale.width - 42, 340));
     this.powerText.setPosition(WORLD.centerX, this.table.bottom - 34);
+    this.feedbackText.setPosition(WORLD.centerX, this.table.top + 28);
+    this.feedbackText.setWordWrapWidth(Math.min(this.scale.width - 48, 330));
   }
 
   private drawUiChrome(): void {

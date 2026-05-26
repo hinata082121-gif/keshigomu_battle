@@ -119,7 +119,7 @@ export class TutorialScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     this.createTextButton(width - UI.safeX - 46, UI.safeTop + 30, 'スキップ', () => {
-      this.scene.start('GameScene', { stage: 1 });
+      this.scene.start('StrategySelectScene', { stage: 1 });
     });
 
     this.createButton(centerX, height - UI.safeBottom - (isCompact ? 62 : 72), Math.min(width * 0.82, 330), this.stepIndex === tutorialSteps.length - 1 ? '勝負開始！' : '次へ', () => {
@@ -128,7 +128,7 @@ export class TutorialScene extends Phaser.Scene {
         this.draw();
         return;
       }
-      this.scene.start('GameScene', { stage: 1 });
+      this.scene.start('StrategySelectScene', { stage: 1 });
     });
   }
 

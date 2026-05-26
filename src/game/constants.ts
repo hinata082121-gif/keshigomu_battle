@@ -35,7 +35,7 @@ export const STAGE_OPPONENTS = [
   },
   {
     stage: 2,
-    name: 'クラスの消しゴム職人',
+    name: 'ワンショット職人',
     label: 'CRAFT',
     introText: '「その角度、まだ甘いな。」',
     difficulty: 'normal',
@@ -43,7 +43,7 @@ export const STAGE_OPPONENTS = [
   },
   {
     stage: 3,
-    name: '机上決戦のラスボス',
+    name: '放課後チャンピオン',
     label: 'BOSS',
     introText: '「この机の王者は、俺だ。」',
     difficulty: 'hard',
@@ -81,15 +81,15 @@ export const TABLE = {
 export const ERASER = {
   width: 76,
   height: 42,
-  bounce: 0.7,
-  drag: 330,
-  maxVelocity: 680,
+  bounce: 0.66,
+  drag: 360,
+  maxVelocity: 620,
   bodyInset: 2,
 };
 
 export const SHOT = {
-  minPower: 145,
-  maxPower: 620,
+  minPower: 110,
+  maxPower: 600,
   maxSwipeDistance: 132,
   stopSpeedThreshold: 16,
 };
@@ -103,30 +103,65 @@ export const CPU = {
 
 export const CPU_BY_DIFFICULTY = {
   easy: {
-    basePower: 280,
-    powerRandom: 140,
+    basePower: 270,
+    powerRandom: 130,
     aimRandomAngleDeg: 26,
-    riskyShotRate: 18,
+    riskyShotRate: 12,
   },
   normal: {
     basePower: 330,
-    powerRandom: 120,
+    powerRandom: 110,
     aimRandomAngleDeg: 18,
-    riskyShotRate: 14,
+    riskyShotRate: 16,
   },
   hard: {
     basePower: 370,
-    powerRandom: 100,
+    powerRandom: 90,
     aimRandomAngleDeg: 14,
-    riskyShotRate: 6,
+    riskyShotRate: 4,
   },
 } as const;
 
 export const STAGE_BALANCE = {
-  1: { maxPower: 560, drag: 350, bounce: 0.68, stopSpeedThreshold: 17, playerXRatio: 0.5, playerYRatio: 0.66, cpuXRatio: 0.5, cpuYRatio: 0.34 },
-  2: { maxPower: 600, drag: 330, bounce: 0.7, stopSpeedThreshold: 16, playerXRatio: 0.43, playerYRatio: 0.65, cpuXRatio: 0.57, cpuYRatio: 0.35 },
-  3: { maxPower: 600, drag: 335, bounce: 0.7, stopSpeedThreshold: 16, playerXRatio: 0.5, playerYRatio: 0.67, cpuXRatio: 0.5, cpuYRatio: 0.33 },
+  1: { maxPower: 560, drag: 360, bounce: 0.66, stopSpeedThreshold: 17, playerXRatio: 0.5, playerYRatio: 0.66, cpuXRatio: 0.5, cpuYRatio: 0.34 },
+  2: { maxPower: 585, drag: 350, bounce: 0.68, stopSpeedThreshold: 17, playerXRatio: 0.43, playerYRatio: 0.65, cpuXRatio: 0.57, cpuYRatio: 0.35 },
+  3: { maxPower: 600, drag: 345, bounce: 0.68, stopSpeedThreshold: 16, playerXRatio: 0.5, playerYRatio: 0.67, cpuXRatio: 0.5, cpuYRatio: 0.33 },
 } as const;
+
+export const DANGER_ZONE = {
+  edge: 55,
+  critical: 30,
+};
+
+export const STRATEGIES = [
+  {
+    id: 'safe',
+    title: '安全第一',
+    description: '安全に押し込む。自爆しにくい。',
+    maxPowerMultiplier: 0.94,
+    jitterMultiplier: 0.65,
+    selfRiskMultiplier: 0.78,
+    scoreBonusType: 'safe',
+  },
+  {
+    id: 'power',
+    title: '一撃狙い',
+    description: '決まれば大きい。外すと危険。',
+    maxPowerMultiplier: 1.05,
+    jitterMultiplier: 1.22,
+    selfRiskMultiplier: 1.2,
+    scoreBonusType: 'power',
+  },
+  {
+    id: 'bounce',
+    title: 'バウンド職人',
+    description: '鉛筆や定規を使って角度で勝つ。',
+    maxPowerMultiplier: 0.98,
+    jitterMultiplier: 0.9,
+    selfRiskMultiplier: 0.96,
+    scoreBonusType: 'bounce',
+  },
+] as const;
 
 export const COLORS = {
   floor: 0x231811,
